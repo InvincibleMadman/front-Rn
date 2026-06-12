@@ -192,3 +192,7 @@ Before any UI adjustment, read:
 - `docs/design-reference-map.md`
 
 This file is mandatory. Any UI repair must check whether each page/component actually matches its concrete reference product or image mapping.
+
+## Asset center docs
+
+资产中心重建约束见 `docs/front-xe-asset-rebuild-contract.md` 和 `docs/front-xe-backend-api-map.md`。

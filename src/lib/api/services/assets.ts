@@ -6,9 +6,22 @@ import type {
   AssetListItem,
   AssetsOverviewGraphResponse,
   ProtocolAssetSummary,
+  ProtocolMindmapResponse,
+  WorkspaceIndexParams,
+  WorkspaceIndexResponse,
   WorkspacePreviewResponse,
+  WorkspaceSearchParams,
+  WorkspaceSearchResponse,
   WorkspaceTreeResponse,
 } from "@/types/api/assets";
+
+type ProtocolListEnvelopeData = string[] | { protocols?: unknown[]; items?: unknown[]; documents?: unknown[] };
+type WorkspaceItemLike = {
+  protocol?: string;
+  scope?: string;
+  workspace_ref?: string;
+  virtual_path?: string;
+};
 
 function selectedNodeId(): string {
   return useUiStore.getState().selectedApiNodeId || "local";
@@ -23,6 +36,77 @@ function csrfHeaders(): HeadersInit {
   return csrfToken ? { "X-CSRF-Token": csrfToken } : {};
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function arrayFromField(value: unknown): unknown[] | undefined {
+  return Array.isArray(value) ? value : undefined;
+}
+
+function normalizeProtocolList(data: ProtocolListEnvelopeData): string[] {
+  const record = isRecord(data) ? data : undefined;
+  const raw = Array.isArray(data)
+    ? data
+    : record
+      ? arrayFromField(record.protocols) ?? arrayFromField(record.items) ?? arrayFromField(record.documents) ?? []
+      : [];
+
+  return raw
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (isRecord(item)) return String(item.protocol ?? item.name ?? item.id ?? "").trim();
+      return "";
+    })
+    .filter(Boolean);
+}
+
+function queryString(params: Record<string, boolean | number | string | Array<boolean | number | string> | null | undefined>): string {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value == null) return;
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) return;
+      query.set(key, value.map((item) => String(item)).join(","));
+      return;
+    }
+
+    query.set(key, String(value));
+  });
+
+  const serialized = query.toString();
+  return serialized ? `?${serialized}` : "";
+}
+
+function parseWorkspaceRef(value?: string): { protocol?: string; scope?: string; virtualPath?: string } | null {
+  const ref = String(value ?? "").trim();
+  const match = /^workspace:\/\/([^/]+)\/([^/]+)(\/.*)?$/.exec(ref);
+  if (!match) return null;
+
+  return {
+    protocol: match[1],
+    scope: match[2],
+    virtualPath: match[3] || "/",
+  };
+}
+
+function normalizeWorkspaceItem<T extends WorkspaceItemLike>(item: T, fallbackProtocol: string, fallbackScope?: string): T {
+  const refParts = parseWorkspaceRef(item.workspace_ref);
+
+  return {
+    ...item,
+    protocol: item.protocol ?? refParts?.protocol ?? fallbackProtocol,
+    scope: item.scope ?? refParts?.scope ?? fallbackScope,
+    virtual_path: item.virtual_path ?? refParts?.virtualPath ?? "/",
+  };
+}
+
+function normalizeWorkspaceItems<T extends WorkspaceItemLike>(items: T[] | undefined, fallbackProtocol: string, fallbackScope?: string): T[] {
+  return (items ?? []).map((item) => normalizeWorkspaceItem(item, fallbackProtocol, fallbackScope));
+}
+
 export const assetsApi = {
   async getOverviewGraph(): Promise<AssetsOverviewGraphResponse> {
     const response = await apiClient.requestEnvelope<AssetsOverviewGraphResponse>(nodeApiPath("/assets/overview-graph"), {
@@ -31,12 +115,15 @@ export const assetsApi = {
     return response.data;
   },
 
-  async listAssets(params?: { keyword?: string; scope?: string; kind?: string; protocol?: string }): Promise<AssetListItem[]> {
-    const query = new URLSearchParams();
-    Object.entries(params ?? {}).forEach(([key, value]) => {
-      if (value) query.set(key, value);
+  async listProtocols(): Promise<string[]> {
+    const response = await apiClient.requestEnvelope<ProtocolListEnvelopeData>(nodeApiPath("/protocols"), {
+      credentials: "include",
     });
-    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return normalizeProtocolList(response.data);
+  },
+
+  async listAssets(params?: { keyword?: string; scope?: string; kind?: string; protocol?: string }): Promise<AssetListItem[]> {
+    const suffix = queryString(params ?? {});
     const response = await apiClient.requestEnvelope<{ items: AssetListItem[] }>(nodeApiPath(`/assets${suffix}`), {
       credentials: "include",
     });
@@ -57,24 +144,77 @@ export const assetsApi = {
     return response.data;
   },
 
+  async getProtocolMindmap(protocol: string): Promise<ProtocolMindmapResponse> {
+    const response = await apiClient.requestEnvelope<ProtocolMindmapResponse>(nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/assets/mindmap`), {
+      credentials: "include",
+    });
+    return response.data;
+  },
+
   async getWorkspaceTree(protocol: string, scope: string, path = "/"): Promise<WorkspaceTreeResponse> {
     const response = await apiClient.requestEnvelope<WorkspaceTreeResponse>(
-      `${nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/workspace/tree`)}?scope=${encodeURIComponent(scope)}&path=${encodeURIComponent(path)}`,
+      `${nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/workspace/tree`)}${queryString({ scope, path })}`,
       { credentials: "include" },
     );
-    return response.data;
+    return {
+      ...response.data,
+      items: normalizeWorkspaceItems(response.data.items, protocol, scope),
+    };
+  },
+
+  async getWorkspaceIndex(protocol: string, params?: WorkspaceIndexParams): Promise<WorkspaceIndexResponse> {
+    const fallbackScope = params?.scopes?.length === 1 ? params.scopes[0] : undefined;
+    const response = await apiClient.requestEnvelope<WorkspaceIndexResponse>(
+      `${nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/workspace/index`)}${queryString({
+        scopes: params?.scopes,
+        max_depth: params?.max_depth,
+        limit: params?.limit,
+        cursor: params?.cursor,
+        include_dirs: params?.include_dirs,
+        include_counts: params?.include_counts,
+      })}`,
+      { credentials: "include" },
+    );
+    return {
+      ...response.data,
+      items: normalizeWorkspaceItems(response.data.items, protocol, fallbackScope),
+    };
+  },
+
+  async searchWorkspace(protocol: string, params?: WorkspaceSearchParams): Promise<WorkspaceSearchResponse> {
+    const fallbackScope = params?.scopes?.length === 1 ? params.scopes[0] : undefined;
+    const response = await apiClient.requestEnvelope<WorkspaceSearchResponse>(
+      `${nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/workspace/search`)}${queryString({
+        q: params?.q,
+        scopes: params?.scopes,
+        ext: params?.ext,
+        type: params?.type,
+        path: params?.path,
+        content: params?.content,
+        limit: params?.limit,
+        cursor: params?.cursor,
+      })}`,
+      { credentials: "include" },
+    );
+    return {
+      ...response.data,
+      items: response.data.items.map((match) => ({
+        ...match,
+        item: normalizeWorkspaceItem(match.item, protocol, fallbackScope),
+      })),
+    };
   },
 
   async getWorkspacePreview(protocol: string, scope: string, path: string): Promise<WorkspacePreviewResponse> {
     const response = await apiClient.requestEnvelope<WorkspacePreviewResponse>(
-      `${nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/workspace/preview`)}?scope=${encodeURIComponent(scope)}&path=${encodeURIComponent(path)}`,
+      `${nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/workspace/preview`)}${queryString({ scope, path })}`,
       { credentials: "include" },
     );
     return response.data;
   },
 
   getWorkspaceDownloadUrl(protocol: string, scope: string, path: string): string {
-    return resolveApiUrl(`${nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/workspace/download`)}?scope=${encodeURIComponent(scope)}&path=${encodeURIComponent(path)}`);
+    return resolveApiUrl(`${nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/workspace/download`)}${queryString({ scope, path })}`);
   },
 
   async uploadArchive(protocol: string, file: File, replaceExisting: boolean): Promise<ProtocolAssetSummary> {

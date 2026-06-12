@@ -1,7 +1,16 @@
 import { apiClient } from "@/lib/api/client";
+import { useUiStore } from "@/stores/ui-store";
 import type { ProtocolListResponse, ProtocolSummaryResponse } from "@/types/api/protocols";
 
 type ProtocolListEnvelopeData = ProtocolListResponse | string[] | { items?: unknown[]; documents?: unknown[] };
+
+function selectedNodeId(): string {
+  return useUiStore.getState().selectedApiNodeId || "local";
+}
+
+function nodeApiPath(path: string): string {
+  return `/node-api/${encodeURIComponent(selectedNodeId())}/api/v1${path}`;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -34,14 +43,19 @@ function normalizeProtocolList(data: ProtocolListEnvelopeData): string[] {
 
 export const protocolsApi = {
   listProtocols: async (): Promise<string[]> => {
-    const response = await apiClient.requestEnvelope<ProtocolListEnvelopeData>("/api/v1/protocols");
+    const response = await apiClient.requestEnvelope<ProtocolListEnvelopeData>(nodeApiPath("/protocols"), {
+      credentials: "include",
+    });
 
     return normalizeProtocolList(response.data);
   },
 
   getProtocolSummary: async (protocol: string): Promise<ProtocolSummaryResponse> => {
     const response = await apiClient.requestEnvelope<ProtocolSummaryResponse>(
-      `/api/v1/protocols/${encodeURIComponent(protocol)}/summary`,
+      nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/summary`),
+      {
+        credentials: "include",
+      },
     );
 
     return response.data;
