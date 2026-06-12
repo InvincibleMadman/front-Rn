@@ -1,0 +1,93 @@
+fuzz-core-web-ui
+├── README.generated.md
+├── index.html
+├── package.json
+├── postcss.config.js
+├── public
+│   └── shield.svg
+├── src
+│   ├── app
+│   │   ├── App.tsx
+│   │   ├── providers.tsx
+│   │   └── router.tsx
+│   ├── components
+│   │   ├── charts
+│   │   │   ├── bar-chart.tsx
+│   │   │   ├── donut-chart.tsx
+│   │   │   ├── echarts-base.tsx
+│   │   │   └── line-area-chart.tsx
+│   │   ├── common
+│   │   │   ├── empty-state.tsx
+│   │   │   ├── form-field.tsx
+│   │   │   ├── json-viewer.tsx
+│   │   │   ├── status-badge.tsx
+│   │   │   └── summary-card.tsx
+│   │   ├── layout
+│   │   │   ├── app-shell.tsx
+│   │   │   ├── page-header.tsx
+│   │   │   ├── sidebar.tsx
+│   │   │   └── topbar.tsx
+│   │   └── ui
+│   │       ├── badge.tsx
+│   │       ├── button.tsx
+│   │       ├── card.tsx
+│   │       ├── dialog.tsx
+│   │       ├── input.tsx
+│   │       ├── label.tsx
+│   │       ├── scroll-area.tsx
+│   │       ├── select.tsx
+│   │       ├── separator.tsx
+│   │       ├── switch.tsx
+│   │       ├── table.tsx
+│   │       ├── tabs.tsx
+│   │       └── textarea.tsx
+│   ├── features
+│   │   ├── dashboard
+│   │   │   └── dashboard-view.tsx
+│   │   ├── jobs
+│   │   │   ├── job-create-view.tsx
+│   │   │   ├── job-detail-view.tsx
+│   │   │   └── jobs-view.tsx
+│   │   ├── offline
+│   │   │   └── offline-studio-view.tsx
+│   │   └── settings
+│   │       └── settings-view.tsx
+│   ├── hooks
+│   │   ├── use-theme-sync.ts
+│   │   └── use-websocket-stream.ts
+│   ├── lib
+│   │   ├── api
+│   │   │   ├── client.ts
+│   │   │   ├── services
+│   │   │   │   ├── jobs.ts
+│   │   │   │   ├── offline.ts
+│   │   │   │   └── system.ts
+│   │   │   └── url.ts
+│   │   └── utils
+│   │       ├── cn.ts
+│   │       └── format.ts
+│   ├── main.tsx
+│   ├── pages
+│   │   ├── dashboard-page.tsx
+│   │   ├── job-create-page.tsx
+│   │   ├── job-detail-page.tsx
+│   │   ├── jobs-page.tsx
+│   │   ├── offline-studio-page.tsx
+│   │   └── settings-page.tsx
+│   ├── stores
+│   │   ├── ui-store.ts
+│   │   └── workspace-store.ts
+│   ├── styles
+│   │   └── globals.css
+│   ├── types
+│   │   └── api
+│   │       ├── config.ts
+│   │       ├── envelope.ts
+│   │       ├── jobs.ts
+│   │       └── offline.ts
+│   └── vite-env.d.ts
+├── tailwind.config.ts
+├── tsconfig.app.json
+├── tsconfig.json
+├── tsconfig.node.json
+└── vite.config.ts

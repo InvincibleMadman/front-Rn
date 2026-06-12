@@ -1,0 +1,48 @@
+import { apiClient } from "@/lib/api/client";
+import { resolveApiUrl } from "@/lib/api/url";
+import { useAuthStore } from "@/stores/auth-store";
+import { useUiStore } from "@/stores/ui-store";
+import type { ReportRecord, ReportSummary } from "@/types/api/reports";
+
+function selectedNodeId(): string {
+  return useUiStore.getState().selectedApiNodeId || "local";
+}
+
+function nodeApiPath(path: string): string {
+  return `/node-api/${encodeURIComponent(selectedNodeId())}/api/v1${path}`;
+}
+
+function csrfHeaders(): HeadersInit {
+  const csrfToken = useAuthStore.getState().csrfToken;
+  return csrfToken ? { "X-CSRF-Token": csrfToken } : {};
+}
+
+export const reportsApi = {
+  async getSummary(protocol: string): Promise<ReportSummary> {
+    const response = await apiClient.requestEnvelope<ReportSummary>(nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/reports/summary`), {
+      credentials: "include",
+    });
+    return response.data;
+  },
+
+  async list(protocol: string): Promise<ReportRecord[]> {
+    const response = await apiClient.requestEnvelope<{ items: ReportRecord[] }>(nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/reports`), {
+      credentials: "include",
+    });
+    return response.data.items ?? [];
+  },
+
+  async generate(protocol: string, body: Record<string, unknown>): Promise<ReportRecord> {
+    const response = await apiClient.requestEnvelope<ReportRecord>(nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/reports/generate`), {
+      method: "POST",
+      credentials: "include",
+      headers: csrfHeaders(),
+      body: JSON.stringify(body),
+    });
+    return response.data;
+  },
+
+  downloadUrl(protocol: string, reportId: string): string {
+    return resolveApiUrl(nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/reports/${encodeURIComponent(reportId)}/download`));
+  },
+};

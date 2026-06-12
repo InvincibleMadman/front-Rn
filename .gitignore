@@ -1,0 +1,40 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+.yarn/
+
+# Build and Vite cache
+dist/
+.vite/
+node_modules/.vite-cache/
+*.tsbuildinfo
+
+# Web BFF runtime data. These files contain local sessions, node metadata and sqlite WALs.
+.bff-data/
+*.sqlite
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+
+# Local validation/runtime logs
+.tmp-validation/
+.codex-log/
+coverage/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local environment files. Keep examples tracked.
+.env
+.env.*
+!.env.example
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json

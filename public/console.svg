@@ -1,0 +1,201 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" fill="none">
+  <defs>
+    <linearGradient id="pipeGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.34"/>
+      <stop offset="55%" stop-color="#67E8F9" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#C084FC" stop-opacity="0.28"/>
+    </linearGradient>
+
+    <linearGradient id="softGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.16"/>
+      <stop offset="50%" stop-color="#67E8F9" stop-opacity="0.13"/>
+      <stop offset="100%" stop-color="#E9D5FF" stop-opacity="0.10"/>
+    </linearGradient>
+
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="softBlur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.5"/>
+    </filter>
+
+    <style>
+      .line{stroke:#8FA0D7;stroke-opacity:.16;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+      .line2{stroke:#A7B6E8;stroke-opacity:.14;stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round}
+      .pipeOuter{stroke:url(#pipeGrad);stroke-opacity:.30;stroke-width:18;stroke-linecap:round;stroke-linejoin:round;filter:url(#glow)}
+      .pipeInner{stroke:url(#pipeGrad);stroke-opacity:.58;stroke-width:7;stroke-linecap:round;stroke-linejoin:round}
+      .face{fill:url(#softGrad);fill-opacity:.26;stroke:#A7B6E8;stroke-opacity:.22;stroke-width:1.5}
+      .face2{fill:#FFFFFF;fill-opacity:.09;stroke:#B9C3EB;stroke-opacity:.18;stroke-width:1.4}
+      .faint{stroke:#A7B6E8;stroke-opacity:.10;stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round}
+      .dot{fill:#C4B5FD;fill-opacity:.28}
+      .gear{stroke:#B8C4EA;stroke-opacity:.12;stroke-width:1.4;fill:#FFFFFF;fill-opacity:.05}
+    </style>
+  </defs>
+
+  <!-- subtle left and bottom framing geometry -->
+  <g opacity=".9">
+    <path class="line2" d="M110 118 304 118 452 205 452 346"/>
+    <path class="line2" d="M36 712 212 620 394 711 394 806"/>
+    <path class="line2" d="M43 488 169 488 281 548 281 651"/>
+    <path class="line2" d="M986 785 1094 712 1277 785"/>
+    <path class="line2" d="M0 760 79 760 164 820"/>
+    <path class="line2" d="M219 809 60 809"/>
+    <polygon class="faint" points="118,250 158,210 215,225 222,281 182,319 128,304"/>
+    <polygon class="faint" points="98,540 130,522 158,540 158,575 130,592 98,575"/>
+    <path class="faint" d="M68 532h8M86 532h8M104 532h8M122 532h8M140 532h8"/>
+  </g>
+
+  <!-- main right-side industrial network -->
+  <g>
+    <!-- crossing pipes -->
+    <path class="pipeOuter" d="M867 330 1158 162 1398 306"/>
+    <path class="pipeOuter" d="M845 339 1150 515 1396 377"/>
+    <path class="pipeOuter" d="M1185 161 1185 95"/>
+    <path class="pipeOuter" d="M1398 306 1496 250"/>
+    <path class="pipeOuter" d="M1396 377 1481 433"/>
+    <path class="pipeOuter" d="M1161 512 1096 658"/>
+    <path class="pipeOuter" d="M1296 494 1296 621"/>
+
+    <path class="pipeInner" d="M867 330 1158 162 1398 306"/>
+    <path class="pipeInner" d="M845 339 1150 515 1396 377"/>
+    <path class="pipeInner" d="M1185 161 1185 95"/>
+    <path class="pipeInner" d="M1398 306 1496 250"/>
+    <path class="pipeInner" d="M1396 377 1481 433"/>
+    <path class="pipeInner" d="M1161 512 1096 658"/>
+    <path class="pipeInner" d="M1296 494 1296 621"/>
+
+    <!-- soft ambient shapes -->
+    <ellipse cx="1120" cy="350" rx="340" ry="170" fill="url(#softGrad)" fill-opacity=".10" filter="url(#softBlur)"/>
+    <ellipse cx="1268" cy="311" rx="220" ry="118" fill="url(#softGrad)" fill-opacity=".08" filter="url(#softBlur)"/>
+  </g>
+
+  <!-- center cross node -->
+  <g transform="translate(854 314)">
+    <polygon class="face" points="0,34 36,14 72,34 72,76 36,96 0,76"/>
+    <polygon class="face2" points="36,14 72,34 106,15 70,-6"/>
+    <polygon class="face2" points="72,34 72,76 106,57 106,15"/>
+    <circle cx="36" cy="56" r="11" fill="#FFFFFF" fill-opacity=".08" stroke="#D7E3FF" stroke-opacity=".18" stroke-width="1.2"/>
+    <path class="line" d="M27 56h18M36 47v18"/>
+  </g>
+
+  <!-- top server module -->
+  <g transform="translate(1114 76)">
+    <polygon class="face" points="0,30 48,2 112,40 64,68"/>
+    <polygon class="face2" points="0,30 0,104 64,142 64,68"/>
+    <polygon class="face2" points="64,68 112,40 112,114 64,142"/>
+    <path class="line" d="M18 39 59 15 93 35 54 58Z"/>
+    <circle class="dot" cx="78" cy="84" r="3.4"/>
+    <circle class="dot" cx="90" cy="91" r="3.4"/>
+    <circle class="dot" cx="102" cy="98" r="3.4"/>
+  </g>
+
+  <!-- right upper cube -->
+  <g transform="translate(1366 252)">
+    <polygon class="face" points="0,22 36,2 72,22 36,42"/>
+    <polygon class="face2" points="0,22 0,84 36,104 36,42"/>
+    <polygon class="face2" points="36,42 72,22 72,84 36,104"/>
+    <circle class="dot" cx="19" cy="54" r="3"/>
+    <circle class="dot" cx="19" cy="67" r="3"/>
+    <circle class="dot" cx="53" cy="54" r="3"/>
+    <circle class="dot" cx="53" cy="67" r="3"/>
+  </g>
+
+  <!-- lower right node -->
+  <g transform="translate(1356 354)">
+    <polygon class="face" points="0,22 40,0 82,22 42,44"/>
+    <polygon class="face2" points="0,22 0,60 42,84 42,44"/>
+    <polygon class="face2" points="42,44 82,22 82,60 42,84"/>
+    <path class="line" d="M27 25 42 17 56 25M42 17v18"/>
+  </g>
+
+  <!-- center server rack -->
+  <g transform="translate(1103 318)">
+    <polygon class="face" points="0,46 72,4 142,46 70,88"/>
+    <polygon class="face2" points="0,46 0,148 70,188 70,88"/>
+    <polygon class="face2" points="70,88 142,46 142,147 70,188"/>
+    <circle class="dot" cx="98" cy="99" r="3.8"/>
+    <circle class="dot" cx="111" cy="107" r="3.8"/>
+    <circle class="dot" cx="124" cy="115" r="3.8"/>
+    <path class="line" d="M20 82 50 65M20 102 50 85M20 122 50 105"/>
+  </g>
+
+  <!-- lower-right panel box -->
+  <g transform="translate(1317 586)">
+    <polygon class="face" points="0,24 52,0 110,30 58,54"/>
+    <polygon class="face2" points="0,24 0,97 58,128 58,54"/>
+    <polygon class="face2" points="58,54 110,30 110,103 58,128"/>
+    <circle class="dot" cx="30" cy="73" r="3.8"/>
+    <circle class="dot" cx="46" cy="81" r="3.8"/>
+  </g>
+
+  <!-- lower-left of main area: small switch node -->
+  <g transform="translate(1212 482)">
+    <polygon class="face" points="0,18 34,0 68,18 34,37"/>
+    <polygon class="face2" points="0,18 0,49 34,67 34,37"/>
+    <polygon class="face2" points="34,37 68,18 68,49 34,67"/>
+    <path class="line" d="M23 18 34 12 45 18"/>
+  </g>
+
+  <!-- minimal industrial accents -->
+  <g>
+    <!-- valve / tank silhouettes -->
+    <g transform="translate(1427 73)">
+      <ellipse cx="17" cy="21" rx="15" ry="10" class="face2"/>
+      <path class="face2" d="M9 29v44l8 5 8-5V29"/>
+      <path class="line" d="M8 16 17 8 26 16M17 8v14"/>
+    </g>
+
+    <g transform="translate(1457 688)" opacity=".75">
+      <ellipse cx="26" cy="18" rx="22" ry="14" class="face2"/>
+      <path class="face2" d="M10 30v47l16 9 16-9V30"/>
+    </g>
+
+    <!-- rack far lower right -->
+    <g transform="translate(1517 735)" opacity=".72">
+      <polygon class="face2" points="0,20 34,0 80,26 46,46"/>
+      <polygon class="face2" points="0,20 0,48 46,74 46,46"/>
+      <polygon class="face2" points="46,46 80,26 80,53 46,74"/>
+    </g>
+  </g>
+
+  <!-- gears -->
+  <g transform="translate(1034 465)">
+    <circle class="gear" cx="0" cy="0" r="24"/>
+    <circle class="gear" cx="0" cy="0" r="10"/>
+    <path class="gear" d="M0-34v8M24-24l-6 6M34 0h-8M24 24l-6-6M0 34v-8M-24 24l6-6M-34 0h8M-24-24l6 6"/>
+  </g>
+
+  <g transform="translate(1456 296)">
+    <circle class="gear" cx="0" cy="0" r="21"/>
+    <circle class="gear" cx="0" cy="0" r="8"/>
+    <path class="gear" d="M0-30v7M21-21l-5 5M30 0h-7M21 21l-5-5M0 30v-7M-21 21l5-5M-30 0h7M-21-21l5 5"/>
+  </g>
+
+  <g transform="translate(1244 790)">
+    <circle class="gear" cx="0" cy="0" r="26"/>
+    <circle class="gear" cx="0" cy="0" r="10"/>
+    <path class="gear" d="M0-36v9M26-26l-7 7M36 0h-9M26 26l-7-7M0 36v-9M-26 26l7-7M-36 0h9M-26-26l7 7"/>
+  </g>
+
+  <g transform="translate(1572 250)" opacity=".68">
+    <circle class="gear" cx="0" cy="0" r="18"/>
+    <circle class="gear" cx="0" cy="0" r="6.5"/>
+    <path class="gear" d="M0-26v6M18-18l-4.5 4.5M26 0h-6M18 18l-4.5-4.5M0 26v-6M-18 18l4.5-4.5M-26 0h6M-18-18l4.5 4.5"/>
+  </g>
+
+  <!-- faint protocol-like line accents, no text-like bars -->
+  <g opacity=".9">
+    <path class="line2" d="M1039 126 1072 107 1127 117"/>
+    <path class="line2" d="M959 156 986 156 1010 172 1048 172"/>
+    <path class="line2" d="M931 542 969 519 1025 534"/>
+    <path class="line2" d="M807 184 821 172 834 184 847 172 860 184"/>
+    <path class="line2" d="M863 564 879 552 898 564 917 552 935 564"/>
+    <circle class="dot" cx="835" cy="184" r="2.5"/>
+    <circle class="dot" cx="899" cy="564" r="2.5"/>
+  </g>
+</svg>
