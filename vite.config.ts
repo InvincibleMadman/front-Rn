@@ -31,6 +31,44 @@ export default defineConfig({
     ],
   },
 
+  build: {
+    target: "es2020",
+    sourcemap: false,
+    assetsInlineLimit: 4096,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.split("\\").join("/");
+          if (!normalizedId.includes("node_modules")) {
+            return undefined;
+          }
+
+          if (
+            normalizedId.includes("/react/") ||
+            normalizedId.includes("/react-dom/") ||
+            normalizedId.includes("react/jsx-runtime")
+          ) {
+            return "react-vendor";
+          }
+
+          if (normalizedId.includes("@tanstack/") || normalizedId.includes("react-router")) {
+            return "app-vendor";
+          }
+
+          if (normalizedId.includes("echarts") || normalizedId.includes("zrender")) {
+            return "charts";
+          }
+
+          if (normalizedId.includes("lucide-react")) {
+            return "icons";
+          }
+
+          return "vendor";
+        },
+      },
+    },
+  },
+
   server: {
     host: devHost,
     port: 5173,

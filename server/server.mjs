@@ -1,5 +1,7 @@
 import path from "node:path";
 import crypto from "node:crypto";
+import http from "node:http";
+import https from "node:https";
 import net from "node:net";
 import tls from "node:tls";
 import { existsSync } from "node:fs";
@@ -10,7 +12,13 @@ import Fastify from "fastify";
 import fastifyStatic from "@fastify/static";
 import fastifyCookie from "@fastify/cookie";
 import fastifyJwt from "@fastify/jwt";
-import { cleanMessage, logError, logInfo, logReady, logWarn } from "./logger.mjs";
+import {
+  cleanMessage,
+  logError as baseLogError,
+  logInfo as baseLogInfo,
+  logReady,
+  logWarn as baseLogWarn,
+} from "./logger.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,13 +29,134 @@ const isProduction = process.env.NODE_ENV === "production";
 const sessionSecret = process.env.FUZZ_WEB_SESSION_SECRET || "dev-only-change-me-at-least-32-chars";
 const configuredProxyTimeoutMs = Number(process.env.FUZZ_WEB_PROXY_TIMEOUT_MS || 120_000);
 const proxyTimeoutMs = Number.isFinite(configuredProxyTimeoutMs) && configuredProxyTimeoutMs >= 1_000 ? configuredProxyTimeoutMs : 120_000;
+const configuredFrontendHost = process.env.FRONTEND_HOST || process.env.HOST || process.env.FUZZ_WEB_HOST || "0.0.0.0";
+const configuredFrontendPort = Number(process.env.FRONTEND_PORT || process.env.PORT || process.env.FUZZ_WEB_PORT || 8080);
 const defaultNodeId = process.env.FUZZ_WEB_DEFAULT_NODE_ID || "local";
 const defaultNodeName = process.env.FUZZ_WEB_DEFAULT_NODE_NAME || "本机后端";
 const defaultNodeBaseUrl = process.env.FUZZ_WEB_DEFAULT_NODE_BASE_URL || "http://127.0.0.1:18000";
 const defaultNodeSecret = process.env.FUZZ_WEB_DEFAULT_NODE_SECRET || process.env.FUZZ_CORE_NODE_SECRET || "change-me-node-secret";
+const httpsRejectUnauthorized = process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0";
+const proxyCacheTtlMs = 5_000;
+const proxyResponseHeaderNames = ["content-type", "content-disposition", "content-length", "cache-control", "etag", "last-modified"];
+const proxyReadThroughCache = new Map();
+const httpKeepAliveAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 64,
+  maxFreeSockets: 16,
+  timeout: 30_000,
+});
+const httpsKeepAliveAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 64,
+  maxFreeSockets: 16,
+  timeout: 30_000,
+  rejectUnauthorized: httpsRejectUnauthorized,
+});
+const defaultLogLevel = isProduction ? "warn" : "info";
+const normalizedLogLevel = String(process.env.LOG_LEVEL || defaultLogLevel).trim().toLowerCase();
+const LOG_LEVEL = ["debug", "info", "warn", "error"].includes(normalizedLogLevel) ? normalizedLogLevel : defaultLogLevel;
+const LOG_LEVEL_ORDER = { debug: 10, info: 20, warn: 30, error: 40 };
+const frontendHost = configuredFrontendHost;
+const frontendPort = Number.isInteger(configuredFrontendPort) && configuredFrontendPort > 0 ? configuredFrontendPort : 8080;
+
+function shouldLog(level) {
+  return LOG_LEVEL_ORDER[level] >= LOG_LEVEL_ORDER[LOG_LEVEL];
+}
+
+function logInfo(scope, event, message, detail = "") {
+  if (shouldLog("info")) {
+    baseLogInfo(scope, event, message, detail);
+  }
+}
+
+function logWarn(scope, event, message, detail = "") {
+  if (shouldLog("warn")) {
+    baseLogWarn(scope, event, message, detail);
+  }
+}
+
+function logError(scope, event, message, detail = "") {
+  if (shouldLog("error")) {
+    baseLogError(scope, event, message, detail);
+  }
+}
+
+function logDebug(scope, event, message, detail = "") {
+  if (shouldLog("debug")) {
+    baseLogInfo(scope, event, message, detail);
+  }
+}
 
 if (isProduction && (!process.env.FUZZ_WEB_SESSION_SECRET || sessionSecret.startsWith("dev-only"))) {
   throw new Error("FUZZ_WEB_SESSION_SECRET must be set to a strong random value in production");
+}
+
+function isImmutableAssetPath(pathname) {
+  return pathname.startsWith("/assets/");
+}
+
+function hasStaticExtension(pathname) {
+  return /\.[a-z0-9]+$/i.test(pathname);
+}
+
+function isStaticRequestPath(pathname) {
+  return isImmutableAssetPath(pathname) || hasStaticExtension(pathname);
+}
+
+function isSpaRoute(pathname) {
+  return !pathname.startsWith("/web-api") &&
+    !pathname.startsWith("/node-api") &&
+    !pathname.startsWith("/node-ws") &&
+    !isImmutableAssetPath(pathname) &&
+    !hasStaticExtension(pathname);
+}
+
+function setStaticCacheHeaders(replyOrRes, filePathOrPathname) {
+  const pathname = String(filePathOrPathname || "").replaceAll("\\", "/");
+  if (pathname === "/" || pathname.endsWith("/index.html") || pathname.endsWith("index.html")) {
+    replyOrRes.setHeader("Cache-Control", "no-cache");
+    return;
+  }
+  if (pathname.includes("/assets/") || pathname.startsWith("/assets/")) {
+    replyOrRes.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    return;
+  }
+  replyOrRes.setHeader("Cache-Control", "public, max-age=3600");
+}
+
+function getNodeHttpAgent(targetUrl) {
+  return targetUrl.protocol === "https:" ? httpsKeepAliveAgent : httpKeepAliveAgent;
+}
+
+function isCacheableProxyPath(pathname) {
+  return pathname === "/api/v1/system/info" ||
+    pathname === "/api/v1/system/capabilities" ||
+    pathname === "/api/v1/protocols";
+}
+
+function isCacheableProxyRequest(method, targetUrl) {
+  return method.toUpperCase() === "GET" && isCacheableProxyPath(targetUrl.pathname);
+}
+
+function getProxyCacheKey(nodeId, method, targetUrl) {
+  return `${nodeId}:${method.toUpperCase()}:${targetUrl.toString()}`;
+}
+
+function getCachedProxyResponse(cacheKey) {
+  const item = proxyReadThroughCache.get(cacheKey);
+  if (!item) return null;
+  if (Date.now() > item.expiresAt) {
+    proxyReadThroughCache.delete(cacheKey);
+    return null;
+  }
+  return item;
+}
+
+function setCachedProxyResponse(cacheKey, response) {
+  proxyReadThroughCache.set(cacheKey, {
+    ...response,
+    expiresAt: Date.now() + proxyCacheTtlMs,
+  });
 }
 
 const dataDir = (() => {
@@ -55,7 +184,13 @@ await app.register(fastifyStatic, {
   prefix: "/",
   index: ["index.html"],
   decorateReply: true,
-  maxAge: isProduction ? "1h" : 0,
+  maxAge: 0,
+  cacheControl: false,
+  etag: true,
+  lastModified: true,
+  setHeaders(res, filePath) {
+    setStaticCacheHeaders(res, filePath);
+  },
 });
 
 const db = new DatabaseSync(dbPath);
@@ -201,13 +336,15 @@ app.addHook("onRequest", async (request) => {
 
 app.addHook("onResponse", async (request, reply) => {
   const elapsed = Math.round(performance.now() - (request.startTime ?? performance.now()));
-  const message = `${request.method} ${request.url} ${reply.statusCode} ${elapsed}ms`;
+  const pathname = new URL(request.url, "http://localhost").pathname;
+  const message = `${request.method} ${pathname} ${reply.statusCode} ${elapsed}ms`;
+  const staticRequest = isStaticRequestPath(pathname);
 
   if (reply.statusCode >= 500) {
     logError("bff", "http", message);
   } else if (reply.statusCode >= 400) {
     logWarn("bff", "http", message);
-  } else {
+  } else if (!isProduction || LOG_LEVEL === "debug" || !staticRequest) {
     logInfo("bff", "http", message);
   }
 });
@@ -351,24 +488,172 @@ function userFromUpgradeRequest(req) {
   return app.jwt.verify(token);
 }
 
-async function nodeFetchJson(node, pathWithQuery, user) {
-  const { token, jti } = signNodeToken({ user, node });
-  const bodyBuffer = Buffer.alloc(0);
-  const sig = signNodeRequest({ method: "GET", pathWithQuery, bodyBuffer, node, nodeTokenJti: jti });
-  const response = await fetch(new URL(pathWithQuery, node.base_url).toString(), {
-    method: "GET",
-    signal: AbortSignal.timeout(proxyTimeoutMs),
-    headers: {
-      authorization: `Bearer ${token}`,
-      "x-icp-timestamp": sig.timestamp,
-      "x-icp-nonce": sig.nonce,
-      "x-icp-body-sha256": sig.bodyHash,
-      "x-icp-signature": sig.signature,
-    },
+function getProxyHeaderValue(headers, name) {
+  const value = headers[name.toLowerCase()];
+  if (Array.isArray(value)) return value.join(", ");
+  return typeof value === "string" ? value : "";
+}
+
+function pickProxyResponseHeaders(headers) {
+  const selected = {};
+  for (const name of proxyResponseHeaderNames) {
+    const value = headers[name];
+    if (Array.isArray(value)) {
+      selected[name] = value.join(", ");
+    } else if (typeof value === "string") {
+      selected[name] = value;
+    }
+  }
+  return selected;
+}
+
+function applyProxyResponseHeaders(reply, headers) {
+  for (const [name, value] of Object.entries(headers)) {
+    if (value) {
+      reply.header(name, value);
+    }
+  }
+}
+
+function buildNodeProxyHeaders({ requestHeaders, method, bodyBuffer, token, sig }) {
+  const headers = {};
+
+  if (requestHeaders) {
+    for (const [key, value] of Object.entries(requestHeaders)) {
+      if (!value) continue;
+      const lower = key.toLowerCase();
+      if ([
+        "host",
+        "cookie",
+        "content-length",
+        "expect",
+        "authorization",
+        "x-csrf-token",
+        "x-icp-timestamp",
+        "x-icp-nonce",
+        "x-icp-body-sha256",
+        "x-icp-signature",
+      ].includes(lower)) {
+        continue;
+      }
+      headers[key] = Array.isArray(value) ? value.join(",") : String(value);
+    }
+  }
+
+  headers.authorization = `Bearer ${token}`;
+  headers["x-icp-timestamp"] = sig.timestamp;
+  headers["x-icp-nonce"] = sig.nonce;
+  headers["x-icp-body-sha256"] = sig.bodyHash;
+  headers["x-icp-signature"] = sig.signature;
+
+  if (!headers["content-type"] && bodyBuffer.length > 0 && !["GET", "HEAD"].includes(method)) {
+    headers["content-type"] = "application/json";
+  }
+  if (bodyBuffer.length > 0 && !["GET", "HEAD"].includes(method)) {
+    headers["content-length"] = String(bodyBuffer.length);
+  }
+
+  return headers;
+}
+
+async function requestNodeWithAgent({ targetUrl, method, headers, bodyBuffer }) {
+  const transport = targetUrl.protocol === "https:" ? https : http;
+
+  return new Promise((resolve, reject) => {
+    const req = transport.request(
+      targetUrl,
+      {
+        method,
+        headers,
+        agent: getNodeHttpAgent(targetUrl),
+        timeout: proxyTimeoutMs,
+        ...(targetUrl.protocol === "https:" ? { rejectUnauthorized: httpsRejectUnauthorized } : {}),
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        res.on("end", () => {
+          resolve({
+            statusCode: res.statusCode ?? 502,
+            headers: res.headers,
+            body: Buffer.concat(chunks),
+          });
+        });
+      },
+    );
+
+    req.on("timeout", () => {
+      req.destroy(new Error("proxy timeout"));
+    });
+    req.on("error", reject);
+
+    if (bodyBuffer.length > 0 && !["GET", "HEAD"].includes(method)) {
+      req.write(bodyBuffer);
+    }
+
+    req.end();
   });
-  const contentType = response.headers.get("content-type") || "";
-  const payload = contentType.includes("application/json") ? await response.json() : await response.text();
-  if (!response.ok) throw new Error(`${pathWithQuery} ${response.status}`);
+}
+
+async function performNodeRequest({ node, user, method, pathWithQuery, bodyBuffer = Buffer.alloc(0), requestHeaders }) {
+  const methodUpper = method.toUpperCase();
+  const { token, jti } = signNodeToken({ user, node });
+  const sig = signNodeRequest({ method: methodUpper, pathWithQuery, bodyBuffer, node, nodeTokenJti: jti });
+  const targetUrl = new URL(pathWithQuery, node.base_url);
+  const cacheKey = isCacheableProxyRequest(methodUpper, targetUrl)
+    ? getProxyCacheKey(node.node_id, methodUpper, targetUrl)
+    : null;
+
+  if (cacheKey) {
+    const cached = getCachedProxyResponse(cacheKey);
+    if (cached) {
+      return { ...cached, cached: true };
+    }
+  }
+
+  const headers = buildNodeProxyHeaders({
+    requestHeaders,
+    method: methodUpper,
+    bodyBuffer,
+    token,
+    sig,
+  });
+  const upstream = await requestNodeWithAgent({
+    targetUrl,
+    method: methodUpper,
+    headers,
+    bodyBuffer,
+  });
+  const result = {
+    statusCode: upstream.statusCode,
+    headers: pickProxyResponseHeaders(upstream.headers),
+    body: upstream.body,
+    cached: false,
+  };
+
+  if (cacheKey && upstream.statusCode >= 200 && upstream.statusCode < 300) {
+    setCachedProxyResponse(cacheKey, result);
+  }
+
+  return result;
+}
+
+async function nodeFetchJson(node, pathWithQuery, user) {
+  const upstream = await performNodeRequest({
+    node,
+    user,
+    method: "GET",
+    pathWithQuery,
+    bodyBuffer: Buffer.alloc(0),
+  });
+  const contentType = getProxyHeaderValue(upstream.headers, "content-type");
+  const text = upstream.body.toString("utf8");
+  const payload = contentType.includes("application/json") ? JSON.parse(text || "null") : text;
+  if (upstream.statusCode < 200 || upstream.statusCode >= 300) {
+    throw new Error(`${pathWithQuery} ${upstream.statusCode}`);
+  }
   return payload;
 }
 
@@ -1133,7 +1418,6 @@ app.all("/node-api/:nodeId/api/v1/*", { preHandler: [requireWebSession, requireC
   const node = nodeRowById(nodeId);
   if (!node || !node.enabled) return reply.code(404).send({ ok: false, message: "node not found", data: null });
   const user = request.user;
-  const { token, jti } = signNodeToken({ user, node });
   const prefix = `/node-api/${encodeURIComponent(nodeId)}`;
   const pathWithQuery = request.url.startsWith(prefix) ? request.url.slice(prefix.length) : request.url;
   const rawBody = ["GET", "HEAD"].includes(request.method.toUpperCase())
@@ -1143,60 +1427,45 @@ app.all("/node-api/:nodeId/api/v1/*", { preHandler: [requireWebSession, requireC
       : request.rawBody
         ? Buffer.from(request.rawBody)
         : Buffer.from(JSON.stringify(request.body ?? {}));
-  const sig = signNodeRequest({ method: request.method, pathWithQuery, bodyBuffer: rawBody, node, nodeTokenJti: jti });
-  const targetUrl = new URL(pathWithQuery, node.base_url).toString();
-  const headers = new Headers();
-  for (const [key, value] of Object.entries(request.headers)) {
-    if (!value) continue;
-    const lower = key.toLowerCase();
-    if (["host", "cookie", "content-length", "expect", "authorization", "x-csrf-token", "x-icp-timestamp", "x-icp-nonce", "x-icp-body-sha256", "x-icp-signature"].includes(lower)) continue;
-    headers.set(key, Array.isArray(value) ? value.join(",") : String(value));
-  }
-  headers.set("authorization", `Bearer ${token}`);
-  headers.set("x-icp-timestamp", sig.timestamp);
-  headers.set("x-icp-nonce", sig.nonce);
-  headers.set("x-icp-body-sha256", sig.bodyHash);
-  headers.set("x-icp-signature", sig.signature);
-  if (!headers.has("content-type") && rawBody.length > 0) headers.set("content-type", "application/json");
+  let upstream;
 
-    let upstream;
+  try {
+    upstream = await performNodeRequest({
+      node,
+      user,
+      method: request.method,
+      pathWithQuery,
+      bodyBuffer: rawBody,
+      requestHeaders: request.headers,
+    });
+  } catch (error) {
+    logWarn("bff", "proxy", `${request.method} ${pathWithQuery} -> ${node.node_id} 502`, error);
 
-    try {
-      upstream = await fetch(targetUrl, {
-        method: request.method,
-        headers,
-        signal: AbortSignal.timeout(proxyTimeoutMs),
-        body: ["GET", "HEAD"].includes(request.method.toUpperCase()) ? undefined : rawBody,
-      });
-    } catch (error) {
-      logWarn("bff", "proxy", `${request.method} ${pathWithQuery} -> ${node.node_id} 502`, error);
-
-      return reply.code(502).send({
-        ok: false,
-        message: "Backend node unavailable",
-        data: {
-          node_id: node.node_id,
-          status: "offline",
-          error: cleanMessage(error),
-        },
-      });
-    }
-
-  reply.code(upstream.status);
-  for (const header of ["content-type", "content-disposition", "content-length", "cache-control"]) {
-    const value = upstream.headers.get(header);
-    if (value) reply.header(header, value);
+    return reply.code(502).send({
+      ok: false,
+      message: "Backend node unavailable",
+      data: {
+        node_id: node.node_id,
+        status: "offline",
+        error: cleanMessage(error),
+      },
+    });
   }
 
-  const body = Buffer.from(await upstream.arrayBuffer());
+  reply.code(upstream.statusCode);
+  applyProxyResponseHeaders(reply, upstream.headers);
 
-  if (upstream.status >= 500) {
-    logWarn("bff", "proxy", `${request.method} ${pathWithQuery} -> ${node.node_id} ${upstream.status}`);
+  if (upstream.cached) {
+    reply.header("X-BFF-Cache", "HIT");
+  }
+
+  if (upstream.statusCode >= 500) {
+    logWarn("bff", "proxy", `${request.method} ${pathWithQuery} -> ${node.node_id} ${upstream.statusCode}`);
   } else {
-    logInfo("bff", "proxy", `${request.method} ${pathWithQuery} -> ${node.node_id} ${upstream.status}`);
+    logInfo("bff", "proxy", `${request.method} ${pathWithQuery} -> ${node.node_id} ${upstream.statusCode}${upstream.cached ? " cache" : ""}`);
   }
 
-  return reply.send(body);
+  return reply.send(upstream.body);
 });
 
 app.get("/node-ws/:nodeId/api/v1/*", async (_request, reply) => {
@@ -1204,12 +1473,40 @@ app.get("/node-ws/:nodeId/api/v1/*", async (_request, reply) => {
 });
 
 app.setNotFoundHandler(async (request, reply) => {
-  if (request.raw.method === "GET" && !request.url.startsWith("/web-api") && !request.url.startsWith("/node-api") && !request.url.startsWith("/node-ws")) {
+  const pathname = new URL(request.url, "http://localhost").pathname;
+  if (request.raw.method === "GET" && isSpaRoute(pathname)) {
     if (!existsSync(indexHtml)) return reply.code(503).type("text/plain").send("dist/index.html missing; run npm run build first");
+    setStaticCacheHeaders(reply.raw, "/index.html");
     return reply.type("text/html").sendFile("index.html");
   }
   return reply.code(404).send({ ok: false, message: "not found", data: null });
 });
 
-await app.listen({ host: process.env.FUZZ_WEB_HOST || "0.0.0.0", port: Number(process.env.FUZZ_WEB_PORT || 8080) });
-logReady("web bff listening", `http://${process.env.FUZZ_WEB_HOST || "0.0.0.0"}:${Number(process.env.FUZZ_WEB_PORT || 8080)}`);
+let shuttingDown = false;
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logWarn("bff", "shutdown", `received ${signal}`, "closing server");
+  try {
+    await app.close();
+  } catch (error) {
+    logError("bff", "shutdown", "server close failed", error);
+  } finally {
+    httpKeepAliveAgent.destroy();
+    httpsKeepAliveAgent.destroy();
+    process.exit(0);
+  }
+}
+
+process.on("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM");
+});
+
+await app.listen({ host: frontendHost, port: frontendPort });
+logReady("web bff listening", `http://${frontendHost}:${frontendPort}`);
+logDebug("bff", "config", `log level ${LOG_LEVEL}`, `production=${isProduction}`);

@@ -1,7 +1,7 @@
 {
   "name": "fuzz-front",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "type": "module",
   "engines": {
     "node": ">=22.5.0"
@@ -12,11 +12,12 @@
     "dev:local": "node server/dev.mjs",
     "dev:localhost": "node server/dev.mjs",
     "dev:force": "node server/dev.mjs",
-    "serve:dev": "node server/server.mjs",
+    "serve:dev": "node server.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "serve": "node server/server.mjs",
-    "start": "node server/server.mjs"
+    "serve": "node server.mjs",
+    "start": "node server.mjs",
+    "sea": "node scripts/build-node-sea.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

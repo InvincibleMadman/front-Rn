@@ -4,12 +4,14 @@ import { dockLog } from "@/components/layout/dock";
 import { reportGlobalError } from "@/components/common/global-error-center";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { AssetFileTypeOverflowSelector, type AssetFileTypeOption } from "@/features/assets/asset-file-type-overflow-selector";
 import type { WorkspaceTreeItem } from "@/types/api/assets";
 import {
   ASSET_SCOPES,
   buildWorkspaceRef,
   formatBytes,
   formatUpdatedAt,
+  getAssetScopeIcon,
   getAssetScopeLabel,
   getParentVirtualPath,
   getVirtualPathSegments,
@@ -53,6 +55,17 @@ export function AssetDirectoryTable({
   const [treeOpen, setTreeOpen] = useState(false);
 
   const breadcrumbs = useMemo(() => getVirtualPathSegments(normalizedPath), [normalizedPath]);
+  const fileTypeOptions = useMemo<AssetFileTypeOption[]>(
+    () => ASSET_SCOPES.map((item) => {
+      const ScopeIcon = getAssetScopeIcon(item);
+      return {
+        value: item,
+        label: getAssetScopeLabel(item),
+        icon: <ScopeIcon className="size-3.5" />,
+      };
+    }),
+    [],
+  );
 
   const handleCopyRef = async (item?: WorkspaceTreeItem | null): Promise<void> => {
     try {
@@ -94,31 +107,16 @@ export function AssetDirectoryTable({
         </div>
 
         <div className="border-b border-border/70 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="min-w-0 flex-1 overflow-x-auto">
-              <div className="flex min-w-max items-center gap-1.5">
-                {ASSET_SCOPES.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                      item === scope
-                        ? "border-[hsl(var(--accent-blue)/0.22)] bg-[hsl(var(--accent-blue)/0.10)] text-foreground"
-                        : "border-border bg-background text-muted-foreground hover:text-foreground"
-                    }`}
-                    onClick={() => {
-                      onScopeChange(item);
-                      onPathChange("/");
-                      onSelectedItemChange(null);
-                    }}
-                  >
-                    {getAssetScopeLabel(item)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
+          <AssetFileTypeOverflowSelector
+            options={fileTypeOptions}
+            value={scope}
+            onValueChange={(nextValue) => {
+              onScopeChange(nextValue as AssetScope);
+              onPathChange("/");
+              onSelectedItemChange(null);
+            }}
+            actionSlot={(
+              <>
               <Button
                 size="sm"
                 variant="outline"
@@ -142,8 +140,9 @@ export function AssetDirectoryTable({
                 <Copy className="size-3.5" />
                 复制引用
               </Button>
-            </div>
-          </div>
+              </>
+            )}
+          />
         </div>
 
         {items.length === 0 ? (

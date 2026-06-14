@@ -1,168 +1,218 @@
-# ICP Fuzz Web Console（front-Kr-fixed）
+# front-Xe 前端服务器
 
-本目录是 ICP Fuzz 的 Web 前端与 Web BFF。它不是纯静态 Vite 项目：浏览器只访问本目录提供的 Web BFF，Web BFF 再统一代理到一个或多个 Linux FastAPI 后端节点。
-
-## 项目职责
-
-- React + Vite：构建浏览器控制台页面。
-- Fastify BFF：托管 `dist/`，维护统一账户、会话、节点列表、审计日志，并代理节点 API。
-- 浏览器安全边界：浏览器只保存 HttpOnly session cookie 与 CSRF cookie，不保存后端节点 secret，不直连后端业务接口。
-
-## 目录结构
+front-Xe 是 Web 前端和 Node BFF/静态服务入口。开发态使用 Vite，生产态使用构建后的 `dist/` 与 `server.mjs`。浏览器访问后端 API 不应直接请求后端 `/api/v1`，而应通过前端 BFF 的节点代理路径：
 
 ```text
-server/server.mjs          Fastify Web BFF，负责登录、节点管理、HTTP/WS 节点代理、SPA 托管
-src/                       React 页面、组件、状态和 API service
-src/lib/api/client.ts      前端 fetch 封装，要求 ApiEnvelope 响应
-src/lib/api/url.ts         API/WS URL 收敛层，统一映射到 BFF
-src/lib/api/services/      页面调用的业务 API service
-docs/                      设计约束、API 契约、安全模型和修复记录
-public/                    Vite public 资源
+/node-api/{selectedNodeId}/api/v1/...
 ```
 
-运行时目录不会入库：
+## 1. 运行模式概览
 
-```text
-.bff-data/                 BFF SQLite、会话、节点元数据
-dist/                      Vite 构建产物
-.tmp-validation/           本地联调日志
-.codex-log/                自动化工具日志
-```
+| 模式 | 入口 | 用途 | 依赖说明 |
+| --- | --- | --- | --- |
+| Windows / Linux / macOS 开发态 | `npm run dev` | 本地开发、Vite HMR | 不需要 Nginx，不需要 systemd，不需要 SEA 二进制 |
+| 默认跨平台生产态 | `node server.mjs` | Node 服务 `dist/` 静态资源，并提供 BFF `/node-api/` 代理 | 适合 Windows / Linux / macOS |
+| Linux 低配服务器推荐生产态 | `NODE_ENV=production FRONTEND_HOST=0.0.0.0 FRONTEND_PORT=8080 node server.mjs` | 2-4 核 / 2-4G Linux 云服务器 | 不要使用 Vite dev server 对外提供生产访问 |
+| 可选 Nginx + Node BFF 模式 | Nginx + `node server.mjs` | Nginx 负责静态资源缓存、gzip、SPA fallback，Node 只负责 `/node-api/` | 仅作为 Linux 生产环境可选增强 |
+| 可选 Node SEA / 二进制启动模式 | SEA / 单文件启动器 | 只作为部署形态优化 | 不保证明显提升浏览器首屏加载速度，不替代静态资源缓存、拆包、懒加载和 BFF keep-alive |
 
-## 安装依赖
+## 2. Windows 开发态
 
-要求 Node.js `>= 22.5.0`。
-
-```bash
+```powershell
 npm install
-```
-
-建议不要提交 `node_modules/`、`.bff-data/`、`dist/`。`package-lock.json` 应保留，用于 Windows/Linux 复现依赖。
-
-## 开发模式
-
-开发时需要同时启动 BFF 和 Vite。Vite 通过 dev proxy 把 `/web-api`、`/node-api`、`/node-ws`、`/healthz` 转发给 BFF。
-
-终端 1：
-
-```bash
-npm run serve
-```
-
-终端 2：
-
-```bash
 npm run dev
 ```
 
-浏览器访问：
+说明：
 
-```text
-http://127.0.0.1:5173
+- Windows 开发态不需要 Nginx。
+- Windows 开发态不需要 systemd。
+- Windows 开发态不需要生成 SEA 二进制。
+- 不要使用 `NODE_ENV=production xxx` 这种 Linux shell 写法作为 Windows 默认命令。
+- 如需设置环境变量，应使用 PowerShell 语法，例如：
+
+```powershell
+$env:FRONTEND_PORT="8080"
+$env:FRONTEND_HOST="0.0.0.0"
+node server.mjs
 ```
 
-可通过环境变量修改 Vite 转发目标：
+## 3. Linux / macOS 开发态
 
 ```bash
-VITE_BFF_DEV_TARGET=http://127.0.0.1:8080 npm run dev
+npm install
+npm run dev
 ```
 
-## 生产/正式本地运行
+说明：
 
-先构建静态资源：
+- 该模式是开发模式，不建议公网部署。
+- Vite dev server 适合开发调试，不适合作为生产静态资源服务器。
+
+## 4. 默认跨平台生产部署
 
 ```bash
 npm run build
+NODE_ENV=production FRONTEND_HOST=0.0.0.0 FRONTEND_PORT=8080 node server.mjs
 ```
 
-再由 BFF 托管 `dist/`：
+Windows PowerShell 版本：
 
-```bash
-npm run serve
+```powershell
+npm run build
+$env:NODE_ENV="production"
+$env:FRONTEND_HOST="0.0.0.0"
+$env:FRONTEND_PORT="8080"
+node server.mjs
 ```
 
-浏览器访问：
+说明：
+
+- `server.mjs` 会服务 `dist/` 静态文件。
+- `index.html` 使用 no-cache，避免前端版本更新后入口文件缓存不刷新。
+- `dist/assets/*` 使用长期缓存，例如 immutable。
+- `/node-api/` 请求不会被 SPA fallback 吃掉。
+- 生产环境不要使用 `npm run dev`。
+
+## 5. 低配 Linux 云服务器建议
+
+建议：
+
+- 使用生产构建后的 `dist/`。
+- 使用 `NODE_ENV=production`。
+- 关闭 debug 级别日志。
+- 不要让 Vite dev server 对外服务。
+- 不要每次访问动态构建。
+- 如果机器只有 2-4 核 / 2-4G，优先保证：
+  - 前端按路由懒加载。
+  - 资产中心图表、搜索、索引、文件预览按需加载。
+  - 静态资源缓存生效。
+  - BFF 到后端启用 keep-alive。
+  - 页面不可见时不轮询重接口。
+
+systemd 仅示例，不是项目强依赖：
+
+```ini
+[Unit]
+Description=front-Xe web server
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/front-xe
+ExecStart=/usr/bin/node /opt/front-xe/server.mjs
+Restart=always
+Environment=NODE_ENV=production
+Environment=FRONTEND_HOST=127.0.0.1
+Environment=FRONTEND_PORT=8080
+Environment=LOG_LEVEL=warn
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## 6. 可选 Nginx + Node BFF 部署
+
+说明：
+
+- Nginx 不是必须依赖。
+- 只有在 Linux 生产环境需要更高静态资源性能、TLS、gzip、缓存控制时才考虑。
+- Nginx 可以服务 `dist/`，Node 继续处理 `/node-api/`。
+- 如果项目存在 `deploy/nginx/front-xe.conf.example`，可以参考它。
+- Nginx 配置中的 `root` 路径必须改成真实部署路径。
+- `/node-api/` 必须代理到 Node BFF，不能 fallback 到 `index.html`。
+
+## 7. 可选 Node SEA / 二进制启动
+
+说明：
+
+- SEA / 二进制模式只是可选部署形态。
+- 它可能减少运行环境依赖或冷启动文件加载成本，但不会解决浏览器下载 JS 慢、chunk 过大、静态缓存无效等问题。
+- 如果存在 `scripts/build-node-sea.mjs`，它只是准备模板，不会自动生成最终二进制。
+- 不建议把 SEA 作为默认部署方式。
+- Windows 开发态不需要 SEA。
+
+## 8. API 代理与节点选择
+
+必须通过前端 BFF 访问后端，不要直连后端 `/api/v1`。
 
 ```text
-http://127.0.0.1:8080
+/node-api/{selectedNodeId}/api/v1/...
 ```
 
-`npm run serve` 现在会正确返回 SPA `index.html`。如果未构建 `dist/`，BFF 会返回明确的 503 提示，而不是 Fastify static 的 403 文本。
+说明：
 
-## Web BFF 环境变量
+- 这样可以保留多节点切换、BFF 代理、统一错误处理、认证/CSRF/签名等逻辑。
+- 新增前端 API service 时，不要绕过该代理路径。
+- `/node-api/` 不能被静态资源路由或 SPA fallback 接管。
+
+## 9. 资产中心性能实现说明
+
+- 资产中心页面不应在进入首页时加载。
+- 资产中心内部的总览、文件、搜索、关系、索引子页应按需加载。
+- UML 图、ECharts 图、搜索索引、文件预览、JSON Viewer 等重模块不得在首屏同步加载。
+- 搜索索引只在搜索页/索引页按需构建。
+- 内容搜索默认关闭。
+- 文件预览只读取当前文件。
+- 关系图和总览图只在对应子页渲染。
+- 非当前 tab 不应请求重数据。
+- 大列表需要分页、限制首屏数量或“显示更多”。
+
+## 10. 静态资源缓存策略
+
+- `index.html` 不应长期缓存。
+- 带 hash 的 `/assets/*` 可以长期缓存。
+- 其他静态资源可以短期缓存。
+- 生产环境更新后，如果用户仍看到旧页面，优先检查 `index.html` 缓存策略。
+- 不要让 API 响应被当作静态资源缓存。
+
+## 11. 常见问题
+
+### Windows 上还能运行开发态吗？
+
+可以。默认开发态仍然是：
+
+```powershell
+npm run dev
+```
+
+Nginx、systemd、SEA 都不是 Windows 开发态必需项。
+
+### 生产环境能不能直接用 npm run dev？
+
+不建议。`npm run dev` 是 Vite 开发服务器，适合本地调试，不适合生产部署。
+
+### 为什么浏览器不能直接请求后端 API？
+
+项目需要通过前端 BFF 处理节点选择、代理、认证/CSRF/错误处理等逻辑，直接绕过会导致多节点和统一错误处理失效。
+
+### Nginx 是否必须？
+
+不是。默认 Node server 可以跨平台运行。Nginx 只是 Linux 生产部署的可选增强。
+
+### SEA 二进制是否必须？
+
+不是。SEA 主要优化部署形态，不是首屏加载性能的核心手段。
+
+## 12. 检查命令
 
 ```bash
-FUZZ_WEB_HOST=127.0.0.1
-FUZZ_WEB_PORT=8080
-FUZZ_WEB_SESSION_SECRET=replace-with-a-long-random-secret
-FUZZ_WEB_BOOTSTRAP_PASSWORD=replace-bootstrap-admin-password
-FUZZ_WEB_DATA_DIR=.bff-data
-FUZZ_WEB_PROXY_TIMEOUT_MS=120000
-
-# 首次启动且节点表为空时自动创建的默认节点
-FUZZ_WEB_DEFAULT_NODE_ID=local
-FUZZ_WEB_DEFAULT_NODE_NAME=本机后端
-FUZZ_WEB_DEFAULT_NODE_BASE_URL=http://127.0.0.1:18000
-FUZZ_WEB_DEFAULT_NODE_SECRET=change-me-node-secret
+npm exec tsc -- -p tsconfig.app.json --noEmit
 ```
 
-生产环境必须设置强随机 `FUZZ_WEB_SESSION_SECRET`。默认 bootstrap 管理员仅用于本地开发，首次登录后应修改密码或创建新管理员。
-
-## API 与通信方式
-
-浏览器侧固定访问 BFF：
-
-```text
-/web-api/*                         BFF 自身控制面，例如登录、用户、节点、仪表盘聚合
-/node-api/{nodeId}/api/v1/*        BFF 代理到后端节点 HTTP API
-/node-ws/{nodeId}/api/v1/*         BFF 代理到后端节点 WebSocket API
-```
-
-前端代码不要再拼接后端节点 `base_url`。统一入口是：
-
-- `src/lib/api/client.ts`
-- `src/lib/api/url.ts`
-- `src/lib/api/services/*`
-
-## 节点代理安全
-
-BFF 到后端节点的每个业务请求都会注入：
-
-- 短期 HS256 JWT
-- `X-ICP-Timestamp`
-- `X-ICP-Nonce`
-- `X-ICP-Body-SHA256`
-- `X-ICP-Signature`
-
-WebSocket 升级请求同样通过 `/node-ws/*` 由 BFF 验证浏览器 session 后再签名转发。浏览器不能也不应该直接连接后端 WebSocket。
-
-## Windows/Linux 注意事项
-
-- Windows PowerShell 运行中文日志时建议使用 UTF-8：`chcp 65001`。
-- Windows 与 Linux 都可以运行前端；正式构建产物不依赖平台。
-- BFF 使用 Node 22 的 `node:sqlite`，请不要降级到 Node 20 或更低版本。
-
-## 健康检查
+如果项目存在 `tsconfig.node.json`，再运行：
 
 ```bash
-curl http://127.0.0.1:8080/healthz
+npm exec tsc -- -p tsconfig.node.json --noEmit
 ```
 
-返回字段包括：
+如果修改了 `server.mjs`，可检查：
 
-- `ok`
-- `service`
-- `dist_ready`
-- `db_path`
+```bash
+node --check server.mjs
+```
 
-## 本次修复重点
+## 13. 参考文档
 
-- 修复 `npm run serve` 访问 `/` 只显示 403 文本的问题。
-- Vite dev server 增加 BFF proxy，避免开发模式 API 404。
-- WebSocket 不再直连后端节点，统一走 BFF `/node-ws`。
-- 自动初始化默认本机节点，避免依赖被打包进来的 `.bff-data`。
-- 下载 URL 统一走 `resolveApiUrl`，支持跨前缀部署。
-- 修复 Metrics history 对 `{ job_id, points }` 后端格式的兼容。
-- 补充 `.gitignore`，排除运行时数据库、构建产物、日志和本地配置。
-
-更多细节见：`docs/FIX_SUMMARY_2026-06-03.md`。
+- `docs/performance-deployment.md`
+- `deploy/nginx/front-xe.conf.example`
+- `scripts/build-node-sea.mjs`

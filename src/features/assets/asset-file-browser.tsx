@@ -1,12 +1,10 @@
-import { useEffect, useMemo } from "react";
+import { Suspense, lazy, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { dockLog } from "@/components/layout/dock";
 import { reportGlobalError } from "@/components/common/global-error-center";
+import { AssetDirectoryTable } from "@/features/assets/asset-directory-table";
 import { assetsApi } from "@/lib/api/services/assets";
 import type { WorkspaceTreeItem } from "@/types/api/assets";
-import { AssetEmptyState } from "@/features/assets/asset-empty-state";
-import { AssetDirectoryTable } from "@/features/assets/asset-directory-table";
-import { AssetFilePreview } from "@/features/assets/asset-file-preview";
 import {
   normalizeProtocol,
   normalizeVirtualPath,
@@ -14,6 +12,11 @@ import {
   sortWorkspaceItems,
   type AssetScope,
 } from "@/features/assets/asset-utils";
+
+const AssetFilePreview = lazy(async () => {
+  const module = await import("@/features/assets/asset-file-preview");
+  return { default: module.AssetFilePreview };
+});
 
 interface AssetFileBrowserProps {
   protocol: string;
@@ -56,8 +59,8 @@ export function AssetFileBrowser({
     enabled: Boolean(selectedItem && selectedItem.type === "file"),
   });
 
-  useQueryErrorToast(treeQuery.error, "工作区文件树加载失败", "assets", "Workspace tree failed");
-  useQueryErrorToast(previewQuery.error, "工作区文件预览失败", "assets", "Workspace preview failed");
+  useQueryErrorToast(treeQuery.error, "Workspace tree load failed", "assets", "Workspace tree failed");
+  useQueryErrorToast(previewQuery.error, "Workspace preview load failed", "assets", "Workspace preview failed");
 
   const treeItems = useMemo(
     () => sortWorkspaceItems(treeQuery.data?.items ?? []),
@@ -90,12 +93,24 @@ export function AssetFileBrowser({
         downloadUrlForPath={(itemPath) => assetsApi.getWorkspaceDownloadUrl(normalizedProtocol, scope, itemPath)}
       />
 
-      <AssetFilePreview
-        protocol={normalizedProtocol}
-        scope={scope}
-        selectedItem={selectedFile}
-        preview={preview}
-      />
+      {selectedFile ? (
+        <Suspense
+          fallback={(
+            <div className="min-h-[16rem] min-w-0 rounded-[var(--radius-xl)] border border-border bg-card shadow-console">
+              <div className="flex h-full min-h-[16rem] items-center justify-center px-4 py-10 text-sm text-muted-foreground">
+                Loading preview...
+              </div>
+            </div>
+          )}
+        >
+          <AssetFilePreview
+            protocol={normalizedProtocol}
+            scope={scope}
+            selectedItem={selectedFile}
+            preview={preview}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }
