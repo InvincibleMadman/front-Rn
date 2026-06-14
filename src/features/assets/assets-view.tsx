@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { dockLog } from "@/components/layout/dock";
 import { reportGlobalError } from "@/components/common/global-error-center";
@@ -53,7 +53,6 @@ export function AssetsView(): JSX.Element {
   const isAdmin = user?.role === "admin";
 
   const [protocol, setProtocol] = useState("legacy-default");
-  const [protocolInput, setProtocolInput] = useState("legacy-default");
   const [activeTab, setActiveTab] = useState<AssetPrimaryTab>("overview");
   const [scope, setScope] = useState<AssetScope>("source");
   const [path, setPath] = useState("/");
@@ -79,16 +78,16 @@ export function AssetsView(): JSX.Element {
   const protocols = useMemo(() => protocolsQuery.data ?? [], [protocolsQuery.data]);
   const summary = summaryQuery.data ?? null;
   const showReferencePanel = activeTab === "files" || activeTab === "search" || activeTab === "index";
+  const isGraphTab = activeTab === "overview" || activeTab === "lineage";
 
   const refreshLightData = async (): Promise<void> => {
     dockLog("info", "assets", "Asset shell refreshed");
     await Promise.all([protocolsQuery.refetch(), summaryQuery.refetch()]);
   };
 
-  const applyProtocol = (): void => {
-    const nextProtocol = normalizeProtocol(protocolInput);
+  const applyProtocolChange = (nextProtocolValue: string): void => {
+    const nextProtocol = normalizeProtocol(nextProtocolValue);
     setProtocol(nextProtocol);
-    setProtocolInput(nextProtocol);
     setScope("source");
     setPath("/");
     setSelectedItem(null);
@@ -163,24 +162,38 @@ export function AssetsView(): JSX.Element {
         return (
           <AssetOverviewMindmap
             protocol={normalizedProtocol}
+            protocols={protocols}
             summary={summary}
-            onNavigate={navigateFromGraph}
+            onProtocolChange={applyProtocolChange}
           />
         );
     }
   })();
 
+  const graphViewportStyle = useMemo<CSSProperties | undefined>(() => {
+    if (!isGraphTab) return undefined;
+
+    return {
+      "--asset-dock-collapsed-height": "3rem",
+      "--asset-page-padding-y": "calc(var(--page-gutter) * 2.2)",
+      height: "calc(100dvh - var(--topbar-h) - var(--asset-page-padding-y) - var(--asset-dock-collapsed-height))",
+      maxHeight: "calc(100dvh - var(--topbar-h) - var(--asset-page-padding-y) - var(--asset-dock-collapsed-height))",
+      marginBottom: "calc((var(--dock-h) - var(--asset-dock-collapsed-height)) * -1)",
+    } as CSSProperties;
+  }, [isGraphTab]);
+
   return (
-    <div className="min-h-0 min-w-0 space-y-4">
+    <div
+      className={isGraphTab ? "flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden" : "min-h-0 min-w-0 space-y-4"}
+      style={graphViewportStyle}
+    >
       <AssetShell
         protocol={normalizedProtocol}
         protocols={protocols}
-        protocolInput={protocolInput}
-        onProtocolInputChange={setProtocolInput}
-        onProtocolApply={applyProtocol}
         summary={summary}
         view={activeTab}
         onViewChange={setActiveTab}
+        onProtocolChange={applyProtocolChange}
         onRefresh={refreshLightData}
         refreshPending={protocolsQuery.isFetching || summaryQuery.isFetching}
         actions={(
@@ -193,6 +206,9 @@ export function AssetsView(): JSX.Element {
             onProtocolDeleted={() => {
               setPath("/");
               setSelectedItem(null);
+            }}
+            onProtocolImported={(nextProtocol) => {
+              applyProtocolChange(nextProtocol);
             }}
           />
         )}
@@ -217,7 +233,7 @@ export function AssetsView(): JSX.Element {
           </div>
         </div>
       ) : (
-        <div className="min-h-0 min-w-0">
+        <div className={isGraphTab ? "min-h-0 min-w-0 flex-1 overflow-hidden" : "min-h-0 min-w-0"}>
           <Suspense fallback={<AssetTabFallback />}>
             {mainContent}
           </Suspense>

@@ -34,6 +34,14 @@ export interface ProtocolAssetSummary {
   ready: boolean;
 }
 
+export interface ProtocolListResponse {
+  protocols: string[];
+}
+
+export type ProtocolAssetCountMap = Record<string, number>;
+
+export type ProtocolAssetStatusMap = Record<string, string>;
+
 export interface WorkspaceTreeItem {
   name: string;
   type: "directory" | "file";
@@ -121,7 +129,7 @@ export interface WorkspaceSearchResponse {
   limited_by_max_items: boolean;
 }
 
-export interface ProtocolMindmapNode {
+export interface ProtocolAssetsMindmapNode {
   id: string;
   name: string;
   kind: string;
@@ -131,7 +139,7 @@ export interface ProtocolMindmapNode {
   workspace_ref?: string;
 }
 
-export interface ProtocolMindmapEdge {
+export interface ProtocolAssetsMindmapEdge {
   source: string;
   target: string;
   label?: string;
@@ -143,11 +151,55 @@ export interface ProtocolMindmapRecentItem {
   workspace_ref: string;
 }
 
-export interface ProtocolMindmapResponse {
+export interface ProtocolAssetsMindmapResponse {
   protocol: string;
-  nodes: ProtocolMindmapNode[];
-  edges: ProtocolMindmapEdge[];
-  counts: Record<string, number>;
-  statuses: Record<string, string>;
-  recent_items: Record<string, ProtocolMindmapRecentItem[]>;
+  nodes: ProtocolAssetsMindmapNode[];
+  edges: ProtocolAssetsMindmapEdge[];
+  counts: ProtocolAssetCountMap;
+  statuses: ProtocolAssetStatusMap;
+  recent_items?: Record<string, ProtocolMindmapRecentItem[]>;
+}
+
+export type ProtocolMindmapNode = ProtocolAssetsMindmapNode;
+
+export type ProtocolMindmapEdge = ProtocolAssetsMindmapEdge;
+
+export type ProtocolMindmapResponse = ProtocolAssetsMindmapResponse;
+
+export interface UmlAssetAttribute {
+  key: string;
+  value: string | number | boolean | null;
+  muted?: boolean;
+}
+
+export interface UmlAssetEntity {
+  id: string;
+  title: string;
+  kind: string;
+  protocol?: string;
+  scope?: string;
+  status?: string;
+  count?: number;
+  workspace_ref?: string;
+  attributes: UmlAssetAttribute[];
+  degraded?: boolean;
+}
+
+export interface UmlAssetRelation {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+  inferred?: boolean;
+}
+
+export interface UmlAssetProtocolSummary {
+  protocol: string;
+  ready?: boolean;
+  counts: ProtocolAssetCountMap;
+  statuses: ProtocolAssetStatusMap;
+  entities: UmlAssetEntity[];
+  relations: UmlAssetRelation[];
+  recent_items?: Record<string, unknown[]>;
+  degraded?: boolean;
 }

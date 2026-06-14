@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { MoreHorizontal, GitBranch, Trash2, UploadCloud } from "lucide-react";
 import { dockLog } from "@/components/layout/dock";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { assetsApi } from "@/lib/api/services/assets";
-import { buildWorkspaceRef, normalizeProtocol } from "@/features/assets/asset-utils";
+import { normalizeProtocol } from "@/features/assets/asset-utils";
 
 interface AssetImportActionsProps {
   protocol: string;
@@ -17,6 +17,7 @@ interface AssetImportActionsProps {
   onImportOpenChange: (open: boolean) => void;
   onAfterChange?: () => Promise<unknown> | void;
   onProtocolDeleted?: () => void;
+  onProtocolImported?: (protocol: string) => void;
 }
 
 export function AssetImportActions({
@@ -26,12 +27,20 @@ export function AssetImportActions({
   onImportOpenChange,
   onAfterChange,
   onProtocolDeleted,
+  onProtocolImported,
 }: AssetImportActionsProps): JSX.Element {
   const normalizedProtocol = normalizeProtocol(protocol);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [targetProtocol, setTargetProtocol] = useState(normalizedProtocol);
   const [repoUrl, setRepoUrl] = useState("");
   const [branch, setBranch] = useState("main");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const normalizedTargetProtocol = normalizeProtocol(targetProtocol);
+
+  useEffect(() => {
+    if (!importOpen) return;
+    setTargetProtocol(normalizedProtocol);
+  }, [importOpen, normalizedProtocol]);
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -40,13 +49,15 @@ export function AssetImportActions({
       }
 
       dockLog("info", "assets", "Source archive upload started");
-      return assetsApi.uploadArchive(normalizedProtocol, uploadFile, true);
+      return assetsApi.uploadArchive(normalizedTargetProtocol, uploadFile, true);
     },
-    onSuccess: async () => {
+    onSuccess: async (payload) => {
+      const createdProtocol = normalizeProtocol(payload.protocol || normalizedTargetProtocol);
       dockLog("success", "assets", "Source archive upload finished");
       onImportOpenChange(false);
       setUploadFile(null);
       await onAfterChange?.();
+      onProtocolImported?.(createdProtocol);
     },
     onError: (error) => {
       reportGlobalError(error, "源码上传失败", "assets");
@@ -57,12 +68,14 @@ export function AssetImportActions({
   const importMutation = useMutation({
     mutationFn: async () => {
       dockLog("info", "assets", "Git import started");
-      return assetsApi.importGit(normalizedProtocol, repoUrl, branch, true);
+      return assetsApi.importGit(normalizedTargetProtocol, repoUrl, branch, true);
     },
-    onSuccess: async () => {
+    onSuccess: async (payload) => {
+      const createdProtocol = normalizeProtocol(payload.protocol || normalizedTargetProtocol);
       dockLog("success", "assets", "Git import finished");
       onImportOpenChange(false);
       await onAfterChange?.();
+      onProtocolImported?.(createdProtocol);
     },
     onError: (error) => {
       reportGlobalError(error, "Git 导入失败", "assets");
@@ -106,7 +119,20 @@ export function AssetImportActions({
             <div>
               <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Asset Import</p>
               <h2 className="mt-2 text-lg font-semibold text-foreground">导入协议源码</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{buildWorkspaceRef(normalizedProtocol, "source")}</p>
+              <p className="mt-1 text-sm text-muted-foreground">后端会将协议名规范化后作为协议根目录名。</p>
+            </div>
+
+            <div className="space-y-4 rounded-[var(--radius-xl)] border border-border/70 bg-background/60 p-4">
+              <FormField label="目标协议名" description="导入时会以该协议名作为协议根目录名">
+                <Input
+                  value={targetProtocol}
+                  onChange={(event) => setTargetProtocol(event.target.value)}
+                  placeholder="legacy-default"
+                />
+              </FormField>
+              {targetProtocol.trim() && targetProtocol.trim() !== normalizedTargetProtocol ? (
+                <p className="text-xs text-muted-foreground">后端会规范化为 {normalizedTargetProtocol}</p>
+              ) : null}
             </div>
 
             <div className="grid gap-5 lg:grid-cols-2">
@@ -124,7 +150,7 @@ export function AssetImportActions({
                 </FormField>
                 <Button
                   onClick={() => uploadMutation.mutate()}
-                  disabled={uploadMutation.isPending || !uploadFile}
+                  disabled={uploadMutation.isPending || !uploadFile || !normalizedTargetProtocol}
                 >
                   <UploadCloud className="size-4" />
                   上传并解压
@@ -149,7 +175,7 @@ export function AssetImportActions({
                 <Button
                   variant="secondary"
                   onClick={() => importMutation.mutate()}
-                  disabled={importMutation.isPending || !repoUrl.trim()}
+                  disabled={importMutation.isPending || !repoUrl.trim() || !normalizedTargetProtocol}
                 >
                   <GitBranch className="size-4" />
                   开始导入
@@ -166,9 +192,7 @@ export function AssetImportActions({
             <div>
               <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">More</p>
               <h2 className="mt-2 text-lg font-semibold text-foreground">协议操作</h2>
-              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
-                {buildWorkspaceRef(normalizedProtocol, "source")}
-              </p>
+              <p className="mt-1 text-sm text-muted-foreground">{normalizedProtocol}</p>
             </div>
 
             <div className="rounded-[var(--radius-xl)] border border-danger/30 bg-danger/5 p-4">

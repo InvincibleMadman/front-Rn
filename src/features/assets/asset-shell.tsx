@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils/cn";
 import type { ProtocolAssetSummary } from "@/types/api/assets";
@@ -18,12 +18,10 @@ const VIEW_LABELS: Record<AssetPrimaryTab, string> = {
 interface AssetShellProps {
   protocol: string;
   protocols?: string[];
-  protocolInput: string;
-  onProtocolInputChange: (value: string) => void;
-  onProtocolApply: () => void;
   summary?: ProtocolAssetSummary | null;
   view: AssetPrimaryTab;
   onViewChange: (view: AssetPrimaryTab) => void;
+  onProtocolChange: (protocol: string) => void;
   onRefresh: () => void | Promise<void>;
   refreshPending?: boolean;
   actions?: ReactNode;
@@ -32,16 +30,16 @@ interface AssetShellProps {
 export function AssetShell({
   protocol,
   protocols = [],
-  protocolInput,
-  onProtocolInputChange,
-  onProtocolApply,
   summary,
   view,
   onViewChange,
+  onProtocolChange,
   onRefresh,
   refreshPending = false,
   actions,
 }: AssetShellProps): JSX.Element {
+  const protocolOptions = Array.from(new Set([protocol, ...protocols].filter(Boolean)));
+
   return (
     <section className="rounded-[var(--radius-xl)] border border-border bg-card px-3 py-3 shadow-console">
       <div className="flex flex-wrap items-center gap-3">
@@ -88,27 +86,18 @@ export function AssetShell({
             <RefreshCcw className="size-4" />
             刷新
           </Button>
-          <Input
-            value={protocolInput}
-            onChange={(event) => onProtocolInputChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                onProtocolApply();
-              }
-            }}
-            placeholder="legacy-default"
-            className="h-9 w-[12rem] bg-background"
-            list="asset-protocol-suggestions"
-          />
-          <datalist id="asset-protocol-suggestions">
-            {protocols.map((item) => (
-              <option key={item} value={item} />
-            ))}
-          </datalist>
-          <Button size="sm" onClick={onProtocolApply}>
-            切换协议
-          </Button>
+          <Select value={protocol} onValueChange={onProtocolChange}>
+            <SelectTrigger className="h-9 w-[14rem] bg-background">
+              <SelectValue placeholder="选择协议" />
+            </SelectTrigger>
+            <SelectContent>
+              {protocolOptions.map((item) => (
+                <SelectItem key={item} value={item}>
+                  {item}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
     </section>

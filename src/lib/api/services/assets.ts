@@ -6,7 +6,8 @@ import type {
   AssetListItem,
   AssetsOverviewGraphResponse,
   ProtocolAssetSummary,
-  ProtocolMindmapResponse,
+  ProtocolAssetsMindmapResponse,
+  ProtocolListResponse,
   WorkspaceIndexParams,
   WorkspaceIndexResponse,
   WorkspacePreviewResponse,
@@ -15,7 +16,7 @@ import type {
   WorkspaceTreeResponse,
 } from "@/types/api/assets";
 
-type ProtocolListEnvelopeData = string[] | { protocols?: unknown[]; items?: unknown[]; documents?: unknown[] };
+type ProtocolListEnvelopeData = string[] | ProtocolListResponse | { items?: unknown[]; documents?: unknown[] };
 type WorkspaceItemLike = {
   protocol?: string;
   scope?: string;
@@ -45,7 +46,7 @@ function arrayFromField(value: unknown): unknown[] | undefined {
 }
 
 function normalizeProtocolList(data: ProtocolListEnvelopeData): string[] {
-  const record = isRecord(data) ? data : undefined;
+  const record = isRecord(data) ? (data as Record<string, unknown>) : undefined;
   const raw = Array.isArray(data)
     ? data
     : record
@@ -144,8 +145,8 @@ export const assetsApi = {
     return response.data;
   },
 
-  async getProtocolMindmap(protocol: string): Promise<ProtocolMindmapResponse> {
-    const response = await apiClient.requestEnvelope<ProtocolMindmapResponse>(nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/assets/mindmap`), {
+  async getProtocolMindmap(protocol: string): Promise<ProtocolAssetsMindmapResponse> {
+    const response = await apiClient.requestEnvelope<ProtocolAssetsMindmapResponse>(nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/assets/mindmap`), {
       credentials: "include",
     });
     return response.data;

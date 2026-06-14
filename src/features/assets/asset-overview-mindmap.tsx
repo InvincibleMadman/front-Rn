@@ -1,288 +1,307 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { GitBranch, RefreshCw } from "lucide-react";
+import { Boxes, Loader2, RefreshCcw } from "lucide-react";
 import { dockLog } from "@/components/layout/dock";
 import { reportGlobalError } from "@/components/common/global-error-center";
-import { AssetGraphChart, type AssetGraphChartNodePayload } from "@/features/assets/asset-graph-chart";
+import { Button } from "@/components/ui/button";
+import { AssetEmptyState } from "@/features/assets/asset-empty-state";
+import { AssetGraphViewportLayout } from "@/features/assets/asset-graph-viewport-layout";
+import { buildWorkspaceRef, normalizeProtocol } from "@/features/assets/asset-utils";
+import { AssetUmlCanvas } from "@/features/assets/uml/asset-uml-canvas";
 import {
-  ASSET_GRAPH_HEIGHT,
-  buildOverviewMindmapLayout,
-  buildProtocolMindmapModel,
-  getAssetGraphNavigateTab,
-  getAssetGraphStatusLabel,
-  getAssetScopeLabel,
-  isAssetScope,
-  normalizeProtocol,
-  readCssHsl,
-  shortenWorkspaceRef,
-  type AssetGraphLayoutNode,
-  type AssetNavigateTab,
-  type AssetScope,
-} from "@/features/assets/asset-utils";
+  layoutOverviewCatalog,
+} from "@/features/assets/uml/asset-uml-layout";
+import type {
+  UmlAssetEntity,
+  UmlAssetStatus,
+} from "@/features/assets/uml/asset-uml-types";
 import { assetsApi } from "@/lib/api/services/assets";
-import { useUiStore } from "@/stores/ui-store";
-import type { ProtocolAssetSummary } from "@/types/api/assets";
-
-interface TooltipParams {
-  dataType?: string;
-  data?: Partial<AssetGraphLayoutNode>;
-}
+import type { ProtocolAssetSummary, ProtocolMindmapResponse } from "@/types/api/assets";
 
 interface AssetOverviewMindmapProps {
   protocol: string;
+  protocols: string[];
   summary?: ProtocolAssetSummary | null;
-  onNavigate: (tab: AssetNavigateTab, scope: AssetScope) => void;
+  onProtocolChange: (protocol: string) => void;
 }
 
-function nodeTooltip(params: TooltipParams): string {
-  if (params.dataType !== "node" || !params.data) {
-    return "";
+interface AssetCatalogFetchResult {
+  entries: AssetCatalogProtocolEntry[];
+  degradedProtocols: string[];
+}
+
+interface AssetCatalogProtocolEntry {
+  protocol: string;
+  summary?: ProtocolAssetSummary | null;
+  mindmap?: ProtocolMindmapResponse | null;
+  error?: boolean;
+}
+
+const BATCH_SIZE = 4;
+
+const STATUS_ORDER: UmlAssetStatus[] = ["degraded", "running", "ready", "available", "empty"];
+
+function countOf(entry: AssetCatalogProtocolEntry, key: string): number {
+  const counts = entry.mindmap?.counts ?? {};
+
+  if (key === "source") {
+    return Math.max(0, entry.summary?.files_count ?? counts.source ?? 0);
   }
 
-  const ref = params.data.workspace_ref ? shortenWorkspaceRef(params.data.workspace_ref, 44) : "";
-  const count = typeof params.data.count === "number" ? params.data.count : 0;
+  if (key === "crash") {
+    return Math.max(0, counts.crash ?? counts.vulns ?? 0);
+  }
 
-  return [
-    `<div style="min-width: 13rem">`,
-    `<div style="font-weight: 600; margin-bottom: 0.25rem">${params.data.name ?? "资产节点"}</div>`,
-    `<div style="font-size: 12px; opacity: 0.84">状态：${getAssetGraphStatusLabel(params.data.status)}</div>`,
-    `<div style="font-size: 12px; opacity: 0.84">数量：${count}</div>`,
-    ref ? `<div style="font-size: 11px; opacity: 0.72; margin-top: 0.25rem">${ref}</div>` : "",
-    `</div>`,
-  ].join("");
+  return Math.max(0, counts[key] ?? 0);
+}
+
+function statusOf(entry: AssetCatalogProtocolEntry): UmlAssetStatus {
+  if (entry.error) return "degraded";
+
+  const rawStatus = String(
+    entry.mindmap?.statuses?.protocol
+      ?? entry.mindmap?.nodes.find((node) => node.kind === "protocol")?.status
+      ?? "",
+  ).trim().toLowerCase();
+
+  if (STATUS_ORDER.includes(rawStatus as UmlAssetStatus)) {
+    return rawStatus as UmlAssetStatus;
+  }
+
+  if (entry.summary?.ready) return "ready";
+
+  const hasAssets = [
+    "source",
+    "specs",
+    "seeds",
+    "risk",
+    "jobs",
+    "crash",
+    "vulns",
+    "reports",
+    "debug",
+    "kb",
+  ].some((key) => countOf(entry, key) > 0);
+
+  return hasAssets ? "available" : "empty";
+}
+
+function buildProtocolEntity(entry: AssetCatalogProtocolEntry): UmlAssetEntity {
+  const normalized = normalizeProtocol(entry.protocol);
+  const status = statusOf(entry);
+  const workspaceRef = buildWorkspaceRef(normalized, "source");
+
+  return {
+    id: `protocol:${normalized}`,
+    title: normalized,
+    stereotype: "<<protocol>>",
+    subtitle: workspaceRef,
+    kind: "protocol",
+    status,
+    protocol: normalized,
+    scope: "source",
+    workspaceRef,
+    x: 0,
+    y: 0,
+    width: 278,
+    attributes: [
+      { key: "status", value: status, tone: status === "degraded" ? "warning" : status === "ready" ? "success" : "default" },
+      { key: "source", value: `${countOf(entry, "source")} files`, tone: "info" },
+      { key: "seeds", value: countOf(entry, "seeds") },
+      { key: "jobs", value: countOf(entry, "jobs") },
+      { key: "crash", value: countOf(entry, "crash"), tone: "warning" },
+      { key: "vulns", value: countOf(entry, "vulns"), tone: "danger" },
+      { key: "reports", value: countOf(entry, "reports") },
+      { key: "specs", value: countOf(entry, "specs") },
+      { key: "risk", value: countOf(entry, "risk"), tone: "warning" },
+      { key: "debug", value: countOf(entry, "debug") },
+      { key: "kb", value: countOf(entry, "kb") },
+    ],
+  };
+}
+
+function buildCatalogLayout(entries: AssetCatalogProtocolEntry[], protocolCount: number) {
+  const protocolEntities = entries.map(buildProtocolEntity);
+  const totalSourceFiles = entries.reduce((sum, entry) => sum + countOf(entry, "source"), 0);
+  const totalCrash = entries.reduce((sum, entry) => sum + countOf(entry, "crash"), 0);
+  const totalVulns = entries.reduce((sum, entry) => sum + countOf(entry, "vulns"), 0);
+  const totalJobs = entries.reduce((sum, entry) => sum + countOf(entry, "jobs"), 0);
+  const totalReports = entries.reduce((sum, entry) => sum + countOf(entry, "reports"), 0);
+  const degradedCount = entries.filter((entry) => entry.error).length;
+
+  const catalogEntity: UmlAssetEntity = {
+    id: "catalog:workspace",
+    title: "Workspace Asset Catalog",
+    stereotype: "<<asset catalog>>",
+    kind: "catalog",
+    status: degradedCount > 0 ? "degraded" : protocolCount > 0 ? "ready" : "empty",
+    x: 0,
+    y: 0,
+    width: 388,
+    attributes: [
+      { key: "protocols", value: protocolCount, tone: "info" },
+      { key: "source files", value: totalSourceFiles },
+      { key: "crashes", value: totalCrash, tone: "warning" },
+      { key: "vulnerabilities", value: totalVulns, tone: "danger" },
+      { key: "jobs", value: totalJobs },
+      { key: "reports", value: totalReports },
+      { key: "degraded", value: degradedCount, tone: degradedCount > 0 ? "warning" : "default" },
+    ],
+  };
+
+  return layoutOverviewCatalog([catalogEntity, ...protocolEntities]);
+}
+
+async function fetchCatalogEntries(
+  protocolList: string[],
+  currentProtocol: string,
+  currentSummary?: ProtocolAssetSummary | null,
+): Promise<AssetCatalogFetchResult> {
+  const entries: AssetCatalogProtocolEntry[] = [];
+  const degradedProtocols: string[] = [];
+
+  for (let index = 0; index < protocolList.length; index += BATCH_SIZE) {
+    const batch = protocolList.slice(index, index + BATCH_SIZE);
+    const batchResults = await Promise.all(batch.map(async (protocol) => {
+      try {
+        const [summary, mindmap] = await Promise.all([
+          protocol === currentProtocol && currentSummary
+            ? Promise.resolve(currentSummary)
+            : assetsApi.getProtocolAssetsSummary(protocol),
+          assetsApi.getProtocolMindmap(protocol),
+        ]);
+        return {
+          protocol,
+          summary,
+          mindmap,
+          error: false,
+        } satisfies AssetCatalogProtocolEntry;
+      } catch (error) {
+        degradedProtocols.push(protocol);
+        reportGlobalError(error, `协议 ${protocol} 资产目录加载失败`, "assets");
+        dockLog("error", "assets", `Asset catalog degraded: ${protocol}`);
+        return {
+          protocol,
+          summary: protocol === currentProtocol ? currentSummary ?? undefined : undefined,
+          mindmap: undefined,
+          error: true,
+        } satisfies AssetCatalogProtocolEntry;
+      }
+    }));
+    entries.push(...batchResults);
+  }
+
+  return {
+    entries,
+    degradedProtocols,
+  };
 }
 
 export function AssetOverviewMindmap({
   protocol,
+  protocols,
   summary,
-  onNavigate,
+  onProtocolChange,
 }: AssetOverviewMindmapProps): JSX.Element {
   const normalizedProtocol = normalizeProtocol(protocol);
-  const theme = useUiStore((state) => state.theme);
+  const normalizedProtocols = useMemo(
+    () => protocols.map((item) => normalizeProtocol(item)).filter(Boolean),
+    [protocols],
+  );
 
-  const mindmapQuery = useQuery({
-    queryKey: ["protocol-mindmap", normalizedProtocol],
-    queryFn: () => assetsApi.getProtocolMindmap(normalizedProtocol),
+  const protocolList = useMemo(() => {
+    const values = normalizedProtocols.length > 0
+      ? Array.from(new Set([normalizedProtocol, ...normalizedProtocols]))
+      : [normalizedProtocol];
+    return values.sort((left, right) => left.localeCompare(right, "zh-CN", { sensitivity: "base" }));
+  }, [normalizedProtocol, normalizedProtocols]);
+
+  const catalogQuery = useQuery({
+    queryKey: ["assets-catalog-overview", protocolList.join(","), normalizedProtocol, summary?.files_count ?? 0, summary?.ready ?? false],
+    queryFn: () => fetchCatalogEntries(protocolList, normalizedProtocol, summary),
     retry: 0,
+    staleTime: 15_000,
   });
 
   useEffect(() => {
-    if (!mindmapQuery.error) return;
-    reportGlobalError(mindmapQuery.error, "资产关系加载失败", "assets");
-    dockLog("error", "assets", "Asset mindmap failed");
-  }, [mindmapQuery.error]);
+    if (!catalogQuery.error) return;
+    reportGlobalError(catalogQuery.error, "全局资产目录加载失败", "assets");
+    dockLog("error", "assets", "Asset catalog failed");
+  }, [catalogQuery.error]);
 
-  const mindmap = useMemo(
-    () => buildProtocolMindmapModel(normalizedProtocol, mindmapQuery.data, summary),
-    [mindmapQuery.data, normalizedProtocol, summary],
+  const entries = catalogQuery.data?.entries ?? protocolList.map((item) => ({
+    protocol: item,
+    summary: item === normalizedProtocol ? summary ?? undefined : undefined,
+    error: false,
+  }));
+  const degradedProtocols = catalogQuery.data?.degradedProtocols ?? [];
+  const layout = useMemo(
+    () => buildCatalogLayout(entries, normalizedProtocols.length || entries.length),
+    [entries, normalizedProtocols.length],
   );
-  const layout = useMemo(() => buildOverviewMindmapLayout(mindmap), [mindmap]);
+  const totalProtocols = normalizedProtocols.length || entries.length;
+  const readyProtocols = entries.filter((entry) => entry.summary?.ready).length;
+  const loadedProtocols = catalogQuery.data?.entries.filter((entry) => Boolean(entry.summary || entry.mindmap || entry.error)).length ?? 0;
+  const hasAnyProtocol = totalProtocols > 0;
 
-  const colors = useMemo(() => {
-    void theme;
-    return {
-      card: readCssHsl("--card"),
-      cardMuted: readCssHsl("--card", 0.84),
-      background: readCssHsl("--background", 0.66),
-      border: readCssHsl("--border", 0.92),
-      borderSoft: readCssHsl("--border", 0.56),
-      text: readCssHsl("--foreground"),
-      muted: readCssHsl("--muted-foreground"),
-      blue: readCssHsl("--accent-blue"),
-      blueSoft: readCssHsl("--accent-blue", 0.14),
-      orange: readCssHsl("--accent-orange"),
-      orangeSoft: readCssHsl("--accent-orange", 0.18),
-      success: readCssHsl("--color-success"),
-      successSoft: readCssHsl("--color-success", 0.16),
-      danger: readCssHsl("--color-danger"),
-      dangerSoft: readCssHsl("--color-danger", 0.14),
-    };
-  }, [theme]);
+  const toolbar = (
+    <>
+      <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+        协议 {totalProtocols}
+      </span>
+      <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+        已加载 {loadedProtocols}
+      </span>
+      <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+        就绪 {readyProtocols}
+      </span>
+      <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+        降级 {degradedProtocols.length}
+      </span>
+      <div className="ml-auto flex items-center gap-2">
+        <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+          {catalogQuery.isFetching ? <Loader2 className="size-3.5 animate-spin" /> : <Boxes className="size-3.5" />}
+          全局 UML 资产目录
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void catalogQuery.refetch()}
+          disabled={catalogQuery.isFetching}
+        >
+          <RefreshCcw className="size-4" />
+          刷新
+        </Button>
+      </div>
+    </>
+  );
 
-  const option = useMemo(() => {
-    const protocolCount = mindmap.counts.source ?? summary?.files_count ?? 0;
-
-    const chartNodes = layout.nodes.map((node) => {
-      const isProtocol = node.category === "protocol";
-      const isPrimary = node.category === "primary";
-      const isEmpty = node.status === "empty";
-      const fillColor = isProtocol
-        ? colors.blueSoft
-        : isPrimary
-          ? (isEmpty ? colors.background : colors.orangeSoft)
-          : (isEmpty ? colors.background : colors.successSoft);
-      const strokeColor = isProtocol
-        ? colors.blue
-        : isPrimary
-          ? colors.orange
-          : (node.status === "empty" ? colors.borderSoft : colors.success);
-
-      return {
-        ...node,
-        value: node.count ?? 0,
-        symbol: "roundRect",
-        symbolSize: node.symbolSize,
-        label: {
-          show: true,
-          position: "inside",
-          width: node.symbolSize[0] - 18,
-          overflow: "truncate",
-          fontSize: isProtocol ? 13 : 12,
-          fontWeight: isProtocol ? 700 : 600,
-          color: colors.text,
-          lineHeight: 14,
-        },
-        itemStyle: {
-          color: fillColor,
-          borderColor: strokeColor,
-          borderWidth: isProtocol ? 1.8 : 1.4,
-          shadowBlur: 0,
-        },
-      };
-    });
-
-    const chartLinks = layout.edges.map((edge) => ({
-      ...edge,
-      lineStyle: {
-        color: colors.borderSoft,
-        width: 1.4,
-        curveness: edge.target === "scope:vulns" ? 0.08 : 0.04,
-        opacity: 0.94,
-      },
-    }));
-
-    return {
-      animationDuration: 260,
-      animationDurationUpdate: 180,
-      tooltip: {
-        trigger: "item",
-        confine: true,
-        backgroundColor: colors.card,
-        borderColor: colors.border,
-        borderWidth: 1,
-        textStyle: {
-          color: colors.text,
-          fontSize: 12,
-        },
-        formatter: (params: TooltipParams) => nodeTooltip(params),
-      },
-      series: [
-        {
-          type: "graph",
-          layout: "none",
-          roam: false,
-          left: 18,
-          right: 18,
-          top: 18,
-          bottom: 18,
-          coordinateSystem: null,
-          emphasis: {
-            focus: "adjacency",
-            scale: false,
-          },
-          lineStyle: {
-            color: colors.borderSoft,
-            width: 1.4,
-            curveness: 0.04,
-            opacity: 0.94,
-          },
-          edgeLabel: {
-            show: false,
-          },
-          data: chartNodes,
-          links: chartLinks,
-        },
-      ],
-      graphic: protocolCount > 0 ? [] : [
-        {
-          type: "text",
-          left: "center",
-          top: "86%",
-          silent: true,
-          style: {
-            text: "导入源码后将生成真实资产关系",
-            fill: colors.muted,
-            font: "500 12px 'Fira Sans', sans-serif",
-          },
-        },
-      ],
-    };
-  }, [colors, layout.edges, layout.nodes, mindmap.counts.source, summary?.files_count]);
-
-  const handleNodeClick = (node: AssetGraphChartNodePayload): void => {
-    const scope = String(node.scope ?? "").trim();
-    const isEmpty = String(node.status ?? "").trim() === "empty" || (typeof node.count === "number" && node.count <= 0);
-
-    if (!scope || !isAssetScope(scope) || isEmpty) {
-      dockLog("info", "assets", `${node.name ?? "资产节点"} 暂无可跳转内容`);
-      return;
-    }
-
-    onNavigate(getAssetGraphNavigateTab(scope), scope);
-  };
-
-  const recentSections = [
-    { key: "specs", label: "最近分析" },
-    { key: "seeds", label: "最近种子" },
-    { key: "reports", label: "最近报告" },
-  ] as const;
+  if (!hasAnyProtocol) {
+    return (
+      <AssetGraphViewportLayout toolbar={toolbar}>
+        <AssetEmptyState
+          title="资产目录为空"
+          description="当前节点还没有协议项目。导入源码后，总览会显示全局 UML 资产目录。"
+          className="flex h-full min-h-0 items-center justify-center rounded-[var(--radius-lg)] border border-border bg-card p-6 shadow-console"
+        />
+      </AssetGraphViewportLayout>
+    );
+  }
 
   return (
-    <div className="min-h-0 min-w-0 space-y-4">
-      <section className="min-h-0 min-w-0 rounded-[var(--radius-xl)] border border-border bg-card p-4 shadow-console">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-3">
-          <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 font-mono text-xs text-foreground">
-            {normalizedProtocol}
-          </span>
-          <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
-            源码 {summary?.files_count ?? mindmap.counts.source ?? 0}
-          </span>
-          <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
-            状态 {getAssetGraphStatusLabel(summary?.ready ? "ready" : mindmap.statuses.source)}
-          </span>
-          <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
-            {mindmapQuery.isFetching ? <RefreshCw className="size-3.5 animate-spin" /> : <GitBranch className="size-3.5" />}
-            {mindmap.synthetic ? "使用本地推断链路" : "已对齐后端 mindmap"}
-          </span>
-        </div>
-
-        <div className="mt-4 min-h-0 min-w-0 overflow-hidden rounded-[var(--radius-lg)] border border-border/60 bg-background/60 p-3">
-          <AssetGraphChart option={option} height={ASSET_GRAPH_HEIGHT} onNodeClick={handleNodeClick} />
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {recentSections.map((section) => {
-            const items = mindmap.recent_items[section.key] ?? [];
-
-            return (
-              <div key={section.key} className="rounded-[var(--radius-lg)] border border-border/60 bg-background/60 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-foreground">{section.label}</p>
-                  <span className="text-xs text-muted-foreground">
-                    {section.key === "specs" ? getAssetScopeLabel("specs") : section.key === "seeds" ? getAssetScopeLabel("seeds") : getAssetScopeLabel("reports")}
-                  </span>
-                </div>
-                <div className="mt-3 space-y-2">
-                  {items.length > 0 ? (
-                    items.map((item) => (
-                      <div key={item.workspace_ref} className="rounded-[var(--radius-md)] border border-border/50 bg-card/70 px-3 py-2">
-                        <p className="truncate text-sm text-foreground">{item.name}</p>
-                        <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
-                          {shortenWorkspaceRef(item.workspace_ref, 42)}
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-[var(--radius-md)] border border-dashed border-border/60 bg-card/50 px-3 py-3 text-sm text-muted-foreground">
-                      {mindmap.empty ? "导入源码后将生成真实资产关系" : "当前暂无最近资产记录"}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    </div>
+    <AssetGraphViewportLayout toolbar={toolbar}>
+      <AssetUmlCanvas
+        model={layout}
+        minHeight={560}
+        className="h-full min-h-0 rounded-[var(--radius-lg)]"
+        selectedEntityId={`protocol:${normalizedProtocol}`}
+        onEntitySelect={(entity) => {
+          if (!entity.id.startsWith("protocol:")) return;
+          onProtocolChange(entity.id.replace(/^protocol:/, ""));
+          dockLog("info", "assets", `Catalog protocol selected: ${entity.title}`);
+        }}
+      />
+    </AssetGraphViewportLayout>
   );
 }
