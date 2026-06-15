@@ -1,14 +1,10 @@
 import { apiClient } from "@/lib/api/client";
+import { resolveNodeApiPath } from "@/lib/api/url";
 import { useAuthStore } from "@/stores/auth-store";
-import { useUiStore } from "@/stores/ui-store";
 import type { BuildPlan, BuildProbe, BuildRun, LaunchProfile, TargetCandidate } from "@/types/api/build-assistant";
 
-function selectedNodeId(): string {
-  return useUiStore.getState().selectedApiNodeId || "local";
-}
-
 function nodeApiPath(path: string): string {
-  return `/node-api/${encodeURIComponent(selectedNodeId())}/api/v1${path}`;
+  return resolveNodeApiPath(`/api/v1${path}`);
 }
 
 function csrfHeaders(): HeadersInit {

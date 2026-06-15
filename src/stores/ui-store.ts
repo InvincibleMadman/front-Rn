@@ -31,7 +31,7 @@ export const useUiStore = create<UiState>()(
   persist(
     (set, get) => ({
       apiBaseUrl: "",
-      selectedApiNodeId: "local",
+      selectedApiNodeId: "",
       apiNodes: [],
       theme: "light",
       sidebarCollapsed: false,
@@ -49,12 +49,18 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "fuzz-core-ui",
-      version: 2,
+      version: 3,
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") return persistedState;
+        const record = persistedState as Record<string, unknown>;
+        const selectedApiNodeId =
+          typeof record.selectedApiNodeId === "string" && record.selectedApiNodeId !== "local"
+            ? record.selectedApiNodeId
+            : "";
         return {
-          ...persistedState,
+          ...record,
           apiBaseUrl: "",
+          selectedApiNodeId,
         };
       },
       partialize: (state) => ({

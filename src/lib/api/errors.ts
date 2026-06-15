@@ -1,10 +1,10 @@
 export type ApiErrorKind =
-  | "network_error"
+  | "node_not_selected"
+  | "bff_unreachable"
+  | "backend_unreachable"
   | "timeout"
-  | "cors_or_preflight"
   | "http_error"
-  | "envelope_error"
-  | "backend_error"
+  | "response_shape_error"
   | "validation_error"
   | "websocket_error"
   | "unknown";
@@ -18,6 +18,7 @@ export interface ApiErrorPayload {
   statusText?: string;
   requestId?: string;
   operationId?: string;
+  path?: string;
   requestBody?: unknown;
   responseBody?: unknown;
   detail?: unknown;
@@ -93,6 +94,7 @@ export function makeApiError(input: {
   message: string;
   method?: string;
   url?: string;
+  path?: string;
   status?: number;
   statusText?: string;
   requestBody?: unknown;
@@ -116,6 +118,7 @@ export function makeApiError(input: {
     message: input.message,
     method: input.method,
     url: input.url,
+    path: input.path,
     status: input.status,
     statusText: input.statusText,
     requestId,
@@ -129,8 +132,9 @@ export function makeApiError(input: {
   });
 }
 
-export function normalizeApiError(error: unknown, fallback = "请求失败"): ApiErrorPayload {
+export function normalizeApiError(error: unknown, fallback = "Request failed"): ApiErrorPayload {
   if (error instanceof ApiError) return error.payload;
+
   if (isRecord(error) && typeof error.kind === "string" && typeof error.message === "string") {
     const timestamp = typeof error.timestamp === "string" ? error.timestamp : new Date().toISOString();
     return {
@@ -138,27 +142,40 @@ export function normalizeApiError(error: unknown, fallback = "请求失败"): Ap
       timestamp,
     };
   }
+
   if (error instanceof Error) {
     const message = error.message || fallback;
-    const kind: ApiErrorKind = /timeout|aborted/i.test(message) ? "timeout" : /failed to fetch|network/i.test(message) ? "network_error" : "unknown";
+    const lower = message.toLowerCase();
+    const kind: ApiErrorKind =
+      /timeout|aborted/i.test(message)
+        ? "timeout"
+        : lower.includes("node is not selected") || lower.includes("select a backend node")
+          ? "node_not_selected"
+          : /failed to fetch|network|load failed/i.test(message)
+            ? "bff_unreachable"
+            : lower.includes("response shape")
+              ? "response_shape_error"
+              : "unknown";
+
     return {
       kind,
       message,
       cause: { name: error.name, message: error.message, stack: error.stack },
-      hint: kind === "network_error" ? networkCorsHint : undefined,
+      hint: kind === "bff_unreachable" ? networkCorsHint : undefined,
       timestamp: new Date().toISOString(),
     };
   }
+
   return { kind: "unknown", message: fallback, detail: error, timestamp: new Date().toISOString() };
 }
 
 export const networkCorsHint =
-  "检查后端是否启动、API Base URL 是否正确、后端 server.host 是否为 0.0.0.0、config.yaml 的 server.cors.allow_origins 是否包含当前前端 Origin、虚拟机端口映射/防火墙是否放行，以及 Vite 是否使用 --host 0.0.0.0 对外监听。";
+  "Check that the Web BFF is reachable, the selected backend node is online, and the browser is requesting the BFF proxy path instead of a direct backend URL.";
 
 export function hintForStatus(status?: number): string | undefined {
-  if (status === 404) return "资源不存在。请检查请求 URL、job_id/artifact_id/session_id，以及路径是否是后端机器可访问的真实路径。";
-  if (status === 422) return "请求字段未通过后端校验。请检查路径字段是否是后端机器上的路径，以及 target_cmd、cwd、output_dir 等字段格式。";
-  if (status && status >= 500) return "后端内部错误，请查看 operation logs 或后端终端输出。";
+  if (status === 404) return "The requested API path or resource was not found on the selected backend node.";
+  if (status === 422) return "The backend rejected request fields. Check the submitted payload and required parameters.";
+  if (status && status >= 500) return "The backend node returned an internal error. Inspect operation logs or backend console output.";
   return undefined;
 }
 

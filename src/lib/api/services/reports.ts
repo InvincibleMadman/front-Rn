@@ -1,15 +1,10 @@
 import { apiClient } from "@/lib/api/client";
-import { resolveApiUrl } from "@/lib/api/url";
+import { resolveApiUrl, resolveNodeApiPath } from "@/lib/api/url";
 import { useAuthStore } from "@/stores/auth-store";
-import { useUiStore } from "@/stores/ui-store";
 import type { ReportRecord, ReportSummary } from "@/types/api/reports";
 
-function selectedNodeId(): string {
-  return useUiStore.getState().selectedApiNodeId || "local";
-}
-
 function nodeApiPath(path: string): string {
-  return `/node-api/${encodeURIComponent(selectedNodeId())}/api/v1${path}`;
+  return resolveNodeApiPath(`/api/v1${path}`);
 }
 
 function csrfHeaders(): HeadersInit {

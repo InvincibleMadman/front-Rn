@@ -1,6 +1,6 @@
-import { isApiEnvelope, type ApiEnvelope } from "@/types/api/envelope";
-import { resolveApiUrl } from "@/lib/api/url";
-import { makeApiError, networkCorsHint, hintForStatus, getPayloadString } from "@/lib/api/errors";
+import { normalizeApiEnvelope, type ApiEnvelope } from "@/types/api/envelope";
+import { makeApiError, networkCorsHint, hintForStatus, getPayloadString, isRecord } from "@/lib/api/errors";
+import { resolveApiUrl, getSelectedNodeId } from "@/lib/api/url";
 import { useAuthStore } from "@/stores/auth-store";
 
 export class ApiClientError extends Error {
@@ -48,8 +48,8 @@ async function parseBody(response: Response): Promise<unknown> {
       return await response.json();
     } catch (cause) {
       throw makeApiError({
-        kind: "envelope_error",
-        message: "响应声明为 JSON，但解析失败",
+        kind: "response_shape_error",
+        message: "Response declared JSON but could not be parsed.",
         status: response.status,
         statusText: response.statusText,
         detail: cause,
@@ -86,14 +86,83 @@ function buildUrl(path: string, options?: RequestOptions): string {
 
 function extractMessage(payload: unknown, fallback: string): string {
   if (typeof payload === "string" && payload.trim()) return payload;
-  const message = getPayloadString(payload, ["detail", "message", "error"]);
+  const message = getPayloadString(payload, ["detail", "message", "msg", "error"]);
   return message ?? fallback;
+}
+
+function isNodeApiPath(path: string): boolean {
+  return path.startsWith("/api/v1") || path.includes("/node-api/");
+}
+
+function classifyHttpError(path: string, payload: unknown, status: number): "http_error" | "backend_unreachable" {
+  if (isNodeApiPath(path) && status >= 502) {
+    const detailText = extractMessage(payload, "").toLowerCase();
+    if (
+      detailText.includes("connect") ||
+      detailText.includes("connection refused") ||
+      detailText.includes("upstream") ||
+      detailText.includes("backend") ||
+      detailText.includes("timed out")
+    ) {
+      return "backend_unreachable";
+    }
+  }
+  return "http_error";
+}
+
+function normalizeSuccessfulEnvelope<T>(payload: unknown): ApiEnvelope<T> {
+  const envelope = normalizeApiEnvelope<T>(payload);
+  if (envelope) {
+    return {
+      ok: envelope.ok,
+      message: envelope.message,
+      data: envelope.data,
+    };
+  }
+
+  if (isRecord(payload)) {
+    return {
+      ok: true,
+      message: "",
+      data: payload as T,
+      request_id: getPayloadString(payload, ["request_id", "requestId", "x-request-id"]),
+      operation_id: getPayloadString(payload, ["operation_id", "operationId"]),
+    };
+  }
+
+  if (Array.isArray(payload) || payload === null || typeof payload === "string" || typeof payload === "number" || typeof payload === "boolean") {
+    return {
+      ok: true,
+      message: "",
+      data: payload as T,
+    };
+  }
+
+  throw makeApiError({
+    kind: "response_shape_error",
+    message: "Response shape is not a supported API envelope or direct JSON payload.",
+    responseBody: payload,
+    hint: "Supported responses are { ok, message, data }, { is_success, msg, data }, or a direct FastAPI JSON object/array.",
+  });
 }
 
 async function doFetch(path: string, options?: RequestOptions): Promise<{ response: Response; payload: unknown; url: string; method: string }> {
   const timeoutMs = options?.timeoutMs ?? 0;
   const controller = timeoutMs > 0 ? new AbortController() : undefined;
   const method = methodOf(options);
+
+  if (path.startsWith("/api/v1") && !getSelectedNodeId()) {
+    throw makeApiError({
+      kind: "node_not_selected",
+      message: "Backend node is not selected. Select a backend node before sending /api/v1 requests.",
+      method,
+      path,
+      requestBody: serializeRequestBody(options?.body),
+      operationId: options?.operationId,
+      hint: "Choose a node from the topbar node selector, then retry.",
+    });
+  }
+
   const url = buildUrl(path, options);
   const timeoutId = timeoutMs > 0
     ? window.setTimeout(() => controller?.abort("frontend-timeout"), timeoutMs)
@@ -109,26 +178,27 @@ async function doFetch(path: string, options?: RequestOptions): Promise<{ respon
     const payload = await parseBody(response);
     return { response, payload, url, method };
   } catch (cause) {
+    if (cause instanceof Error && cause.name === "ApiError") throw cause;
+
     const isAbort = cause instanceof DOMException && cause.name === "AbortError";
     const causeMessage = cause instanceof Error ? cause.message : String(cause);
     const kind = isAbort || /frontend-timeout|timeout/i.test(causeMessage)
       ? "timeout"
-      : /failed to fetch|load failed|network/i.test(causeMessage)
-        ? "cors_or_preflight"
-        : "network_error";
+      : "bff_unreachable";
 
     throw makeApiError({
       kind,
       message: kind === "timeout"
-        ? `${method} ${url} 前端等待超时`
-        : `${method} ${url} 无法连接后端或被浏览器拦截`,
+        ? `${method} ${path} timed out on the frontend.`
+        : `${method} ${path} could not reach the Web BFF.`,
       method,
       url,
+      path,
       requestBody: serializeRequestBody(options?.body),
       cause,
       operationId: options?.operationId,
       hint: kind === "timeout"
-        ? "该超时来自前端主动 abort。长耗时任务建议不要传 timeoutMs，让后端按自身 timeout_sec 返回 detail。"
+        ? "The frontend timeout expired before a response arrived. Retry or increase the timeout for long-running calls."
         : networkCorsHint,
     });
   } finally {
@@ -142,10 +212,29 @@ export const apiClient = {
 
     if (!response.ok) {
       throw makeApiError({
+        kind: classifyHttpError(path, payload, response.status),
+        message: extractMessage(payload, `${method} ${path} failed with ${response.status}`),
+        method,
+        url,
+        path,
+        status: response.status,
+        statusText: response.statusText,
+        requestBody: serializeRequestBody(options?.body),
+        responseBody: payload,
+        operationId: options?.operationId,
+        hint: hintForStatus(response.status),
+      });
+    }
+
+    const envelope = normalizeSuccessfulEnvelope<T>(payload);
+
+    if (envelope.ok !== true) {
+      throw makeApiError({
         kind: "http_error",
-        message: extractMessage(payload, `${method} ${url} failed with ${response.status}`),
+        message: extractMessage(payload, "Backend returned ok=false."),
         method,
         url,
+        path,
         status: response.status,
         statusText: response.statusText,
         requestBody: serializeRequestBody(options?.body),
@@ -155,47 +244,18 @@ export const apiClient = {
       });
     }
 
-    if (!isApiEnvelope<T>(payload)) {
-      throw makeApiError({
-        kind: "envelope_error",
-        message: "响应不是预期的 ApiEnvelope 结构",
-        method,
-        url,
-        status: response.status,
-        statusText: response.statusText,
-        requestBody: serializeRequestBody(options?.body),
-        responseBody: payload,
-        operationId: options?.operationId,
-        hint: "检查后端新版 /api/v1 接口是否返回 { ok: true, message: string, data: ... }。FastAPI 失败响应应通过 HTTP 非 2xx 和 detail 暴露。",
-      });
-    }
-
-    if ((payload as ApiEnvelope<unknown>).ok !== true) {
-      throw makeApiError({
-        kind: "backend_error",
-        message: extractMessage(payload, "接口返回 ok=false"),
-        method,
-        url,
-        status: response.status,
-        statusText: response.statusText,
-        requestBody: serializeRequestBody(options?.body),
-        responseBody: payload,
-        operationId: options?.operationId,
-        hint: hintForStatus(response.status),
-      });
-    }
-
-    return payload;
+    return envelope;
   },
 
   async requestRaw<T>(path: string, options?: RequestOptions): Promise<T> {
     const { response, payload, url, method } = await doFetch(path, options);
     if (!response.ok) {
       throw makeApiError({
-        kind: "http_error",
-        message: extractMessage(payload, `${method} ${url} failed with ${response.status}`),
+        kind: classifyHttpError(path, payload, response.status),
+        message: extractMessage(payload, `${method} ${path} failed with ${response.status}`),
         method,
         url,
+        path,
         status: response.status,
         statusText: response.statusText,
         requestBody: serializeRequestBody(options?.body),

@@ -41,10 +41,14 @@ export const nodesApi = {
     });
     const nodes = response.data.items.map(mapNode);
     useUiStore.getState().setApiNodes(nodes);
-    const selectedId = useUiStore.getState().selectedApiNodeId || nodes[0]?.id || "local";
-    const selected = nodes.find((node) => node.id === selectedId) ?? nodes[0];
-    if (selected) useUiStore.getState().setSelectedApiNode(selected);
-    return { defaultNodeId: selected?.id ?? "local", nodes };
+    const selectedId = useUiStore.getState().selectedApiNodeId;
+    const selected = selectedId ? nodes.find((node) => node.id === selectedId) ?? null : null;
+
+    if (!selected && selectedId) {
+      useUiStore.getState().setSelectedApiNodeId("");
+    }
+
+    return { defaultNodeId: selected?.id ?? "", nodes };
   },
 
   async createNode(node: { id: string; name: string; baseUrl: string; description?: string; enabled?: boolean; nodeSecret: string }): Promise<ApiNode> {

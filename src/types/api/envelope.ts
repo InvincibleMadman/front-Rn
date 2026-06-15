@@ -8,6 +8,12 @@ export interface ApiEnvelope<T> {
   operationId?: string;
 }
 
+export interface NormalizedApiEnvelope<T> {
+  ok: boolean;
+  message: string;
+  data: T;
+}
+
 export interface ApiErrorShape {
   detail?: unknown;
   message?: string;
@@ -22,6 +28,31 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isApiEnvelope<T>(value: unknown): value is ApiEnvelope<T> {
-  if (!isRecord(value)) return false;
-  return typeof value.ok === "boolean" && typeof value.message === "string" && "data" in value;
+  return normalizeApiEnvelope<T>(value) !== null;
+}
+
+export function normalizeApiEnvelope<T>(value: unknown): NormalizedApiEnvelope<T> | null {
+  if (!isRecord(value)) return null;
+
+  if (typeof value.ok === "boolean" && "data" in value) {
+    return {
+      ok: value.ok,
+      message: typeof value.message === "string" ? value.message : "",
+      data: value.data as T,
+    };
+  }
+
+  if (typeof value.is_success === "boolean" && "data" in value) {
+    return {
+      ok: value.is_success,
+      message: typeof value.msg === "string"
+        ? value.msg
+        : typeof value.message === "string"
+          ? value.message
+          : "",
+      data: value.data as T,
+    };
+  }
+
+  return null;
 }

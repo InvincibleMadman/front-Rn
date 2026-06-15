@@ -1,15 +1,11 @@
 import { apiClient } from "@/lib/api/client";
-import { useUiStore } from "@/stores/ui-store";
+import { resolveNodeApiPath } from "@/lib/api/url";
 import type { ProtocolListResponse, ProtocolSummaryResponse } from "@/types/api/protocols";
 
 type ProtocolListEnvelopeData = ProtocolListResponse | string[] | { items?: unknown[]; documents?: unknown[] };
 
-function selectedNodeId(): string {
-  return useUiStore.getState().selectedApiNodeId || "local";
-}
-
 function nodeApiPath(path: string): string {
-  return `/node-api/${encodeURIComponent(selectedNodeId())}/api/v1${path}`;
+  return resolveNodeApiPath(`/api/v1${path}`);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -34,10 +34,24 @@ export const offlineApi = {
     });
     return response.data;
   },
-  riskUpload: async (file: File): Promise<RiskUploadResponse> => {
+  riskUpload: async ({
+    protocol,
+    file,
+    operation_id,
+  }: {
+    protocol: string;
+    file: File;
+    operation_id?: string;
+  }): Promise<RiskUploadResponse> => {
     const formData = new FormData();
+    formData.append("protocol", protocol);
+    if (operation_id) formData.append("operation_id", operation_id);
     formData.append("file", file);
-    const response = await apiClient.requestEnvelope<RiskUploadResponse>("/api/v1/offline/risk/upload", { method: "POST", body: formData });
+    const response = await apiClient.requestEnvelope<RiskUploadResponse>("/api/v1/offline/risk/upload", {
+      method: "POST",
+      body: formData,
+      operationId: operation_id,
+    });
     return response.data;
   },
   instrument: async (payload: InstrumentRequest): Promise<InstrumentResponse> => {

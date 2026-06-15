@@ -1,11 +1,25 @@
+import { makeApiError } from "@/lib/api/errors";
 import { useUiStore } from "@/stores/ui-store";
 
 export function getApiBaseUrl(): string {
   return useUiStore.getState().apiBaseUrl.trim().replace(/\/+$/, "");
 }
 
-function currentNodeId(): string {
-  return useUiStore.getState().selectedApiNodeId || "local";
+export function getSelectedNodeId(): string | null {
+  const nodeId = useUiStore.getState().selectedApiNodeId?.trim();
+  return nodeId && nodeId !== "local" ? nodeId : null;
+}
+
+export function requireSelectedNodeId(path?: string): string {
+  const nodeId = getSelectedNodeId();
+  if (nodeId) return nodeId;
+
+  throw makeApiError({
+    kind: "node_not_selected",
+    message: "Backend node is not selected. Select a backend node before sending /api/v1 requests.",
+    path,
+    hint: "Choose a node from the topbar node selector, then retry the request.",
+  });
 }
 
 function joinBase(baseUrl: string, path: string): string {
@@ -14,15 +28,17 @@ function joinBase(baseUrl: string, path: string): string {
   return `${baseUrl}${path}`;
 }
 
-function resolveNodeApiPath(path: string): string {
-  const prefix = `/node-api/${encodeURIComponent(currentNodeId())}/api/v1`;
+export function resolveNodeApiPath(path: string): string {
+  const nodeId = requireSelectedNodeId(path);
+  const prefix = `/node-api/${encodeURIComponent(nodeId)}/api/v1`;
   if (path === "/api/v1") return prefix;
   if (path.startsWith("/api/v1/")) return `${prefix}${path.slice("/api/v1".length)}`;
   return path;
 }
 
-function resolveNodeWsPath(path: string): string {
-  const prefix = `/node-ws/${encodeURIComponent(currentNodeId())}/api/v1`;
+export function resolveNodeWsPath(path: string): string {
+  const nodeId = requireSelectedNodeId(path);
+  const prefix = `/node-ws/${encodeURIComponent(nodeId)}/api/v1`;
   if (path === "/api/v1") return prefix;
   if (path.startsWith("/api/v1/")) return `${prefix}${path.slice("/api/v1".length)}`;
   return path;
