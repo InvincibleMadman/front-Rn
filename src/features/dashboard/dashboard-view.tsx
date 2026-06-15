@@ -29,6 +29,7 @@ import {
   type ChartOption,
 } from "@/components/charts/echarts-base";
 import { dashboardApi } from "@/lib/api/services/dashboard";
+import { useUiStore } from "@/stores/ui-store";
 import { cn } from "@/lib/utils/cn";
 import { formatDateTime, formatNumber } from "@/lib/utils/format";
 import type { DashboardMetricOverview } from "@/types/api/dashboard";
@@ -241,6 +242,19 @@ function topRecordEntries(
     .filter(([, value]) => Number.isFinite(value) && value > 0)
     .sort((left, right) => right[1] - left[1])
     .slice(0, limit);
+}
+
+function formatRatioPercent(value: number, total: number): string {
+  if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) {
+    return "0%";
+  }
+
+  const percent = (value / total) * 100;
+  return percent >= 10 ? `${Math.round(percent)}%` : `${percent.toFixed(1)}%`;
+}
+
+function normalizeLabel(value: string | null | undefined): string {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function firstNonEmptyRecord(
@@ -654,8 +668,8 @@ function MetricCard({
               max={ring.max}
               centerValue={ring.centerValue}
               label={ring.label ?? title}
-              size={ring.size ?? "min(5.75rem, 100%)"}
-              strokeWidth={ring.strokeWidth ?? 10}
+              size={ring.size ?? "min(4.9rem, 100%)"}
+              strokeWidth={ring.strokeWidth ?? 12.5}
               colorClassName={style.text}
               active={ringActive}
             />
@@ -716,6 +730,7 @@ function DashboardFloatingToast({
 
 export function DashboardView(): JSX.Element {
   const palette = useEchartsPalette();
+  const selectedApiNodeId = useUiStore((state) => state.selectedApiNodeId);
   const overviewQuery = useQuery({
     queryKey: ["dashboard-overview"],
     queryFn: dashboardApi.getOverview,
@@ -893,21 +908,120 @@ export function DashboardView(): JSX.Element {
     };
   }, [overview?.cross_node.task_distribution, palette]);
 
-  const crashDistributionOption = useMemo<ChartOption>(() => {
-    const items = overview?.cross_node.crash_distribution ?? [];
-    if (!items.length) return emptyDonutOption("0", palette[3]);
-    return donutOption(
-      items.map((item) => ({ name: item.name, value: item.value })),
-      formatNumber(metrics.crashFindings.crashes),
-      [palette[3], palette[4], palette[1]],
-      "No findings",
+  const crashDistributionItems = useMemo(
+    () =>
+      [...(overview?.cross_node.crash_distribution ?? [])]
+        .sort((left, right) => right.value - left.value),
+    [overview?.cross_node.crash_distribution],
+  );
+  const crashDistributionTotal = useMemo(
+    () => crashDistributionItems.reduce((sum, item) => sum + item.value, 0),
+    [crashDistributionItems],
+  );
+  const selectedNodeSummary = useMemo(
+    () =>
+      overview?.nodes.find((node) => node.node_id === selectedApiNodeId) ?? null,
+    [overview?.nodes, selectedApiNodeId],
+  );
+  const selectedCrashDistributionItem = useMemo(() => {
+    const candidates = [
+      selectedNodeSummary?.name,
+      selectedNodeSummary?.node_id,
+      selectedApiNodeId,
+    ]
+      .map((item) => normalizeLabel(item))
+      .filter(Boolean);
+
+    if (!candidates.length) {
+      return null;
+    }
+
+    return (
+      crashDistributionItems.find((item) => {
+        const itemName = normalizeLabel(item.name);
+        return candidates.some((candidate) => candidate === itemName);
+      }) ?? null
+    );
+  }, [crashDistributionItems, selectedApiNodeId, selectedNodeSummary]);
+  const crashDistributionSelectedPercent = useMemo(
+    () =>
+      formatRatioPercent(
+        selectedCrashDistributionItem?.value ?? 0,
+        crashDistributionTotal,
+      ),
+    [crashDistributionTotal, selectedCrashDistributionItem?.value],
+  );
+  const crashRingSegmentPalette = useMemo(
+    () => [
+      palette[0],
+      palette[1],
+      palette[2],
+      palette[4],
+      "hsl(var(--accent-blue))",
+      "hsl(var(--color-success))",
+      "hsl(var(--accent-pink))",
+      "hsl(var(--chart-4))",
+    ],
+    [palette],
+  );
+  const crashDistributionSegments = useMemo(
+    () =>
+      crashDistributionItems.map((item, index) => ({
+        value: item.value,
+        label: item.name,
+        color:
+          crashRingSegmentPalette[index % crashRingSegmentPalette.length] ??
+          palette[0],
+      })),
+    [crashDistributionItems, crashRingSegmentPalette, palette],
+  );
+  const selectedCrashDistributionColor = useMemo(() => {
+    if (!selectedCrashDistributionItem) {
+      return "hsl(var(--accent-blue))";
+    }
+
+    const index = crashDistributionItems.findIndex(
+      (item) => item.name === selectedCrashDistributionItem.name,
+    );
+
+    if (index < 0) {
+      return "hsl(var(--accent-blue))";
+    }
+
+    return (
+      crashRingSegmentPalette[index % crashRingSegmentPalette.length] ?? palette[0]
     );
   }, [
-    metrics.crashFindings.crashes,
-    overview?.cross_node.crash_distribution,
+    crashDistributionItems,
+    crashRingSegmentPalette,
     palette,
+    selectedCrashDistributionItem,
   ]);
+  const otherCrashDistributionItems = useMemo(
+    () =>
+      crashDistributionItems
+        .filter((item) => item.name !== selectedCrashDistributionItem?.name)
+        .map((item) => {
+          const index = crashDistributionItems.findIndex(
+            (candidate) => candidate.name === item.name,
+          );
 
+          return {
+            ...item,
+            color:
+              index >= 0
+                ? crashRingSegmentPalette[index % crashRingSegmentPalette.length] ??
+                  palette[0]
+                : palette[0],
+          };
+        }),
+    [
+      crashDistributionItems,
+      crashRingSegmentPalette,
+      palette,
+      selectedCrashDistributionItem?.name,
+    ],
+  );
   const currentNodeJobTrendOption = useMemo<ChartOption>(() => {
     const items = overview?.current_node.job_trend ?? [];
     if (!items.length) return emptySegmentedBarOption(palette);
@@ -1139,8 +1253,96 @@ export function DashboardView(): JSX.Element {
               Crash 是 Fuzz 发现结果，不表示平台异常或系统故障。
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <EchartsBase option={crashDistributionOption} height="17.5rem" />
+          <CardContent className="grid min-h-[17.5rem] gap-5 p-5 pt-0 lg:grid-cols-[minmax(10.5rem,11.5rem)_minmax(0,1fr)] lg:items-center">
+            <div className="flex items-center justify-center">
+              <DashboardMetricRing
+                value={selectedCrashDistributionItem?.value ?? 0}
+                max={Math.max(crashDistributionTotal, 1)}
+                centerValue={formatNumber(metrics.crashFindings.crashes)}
+                label="跨节点 Crash 发现分布"
+                size="10rem"
+                strokeWidth={12}
+                centerFontSize={17}
+                centerColor="hsl(var(--accent-orange))"
+                colorClassName="text-foreground"
+                segments={crashDistributionSegments}
+              />
+            </div>
+
+            {crashDistributionSegments.length ? (
+              <div className="flex h-full flex-col gap-3 pt-1">
+                <div className="rounded-[var(--radius-lg)] border border-border/60 bg-background/55 px-3 py-2.5">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Current share
+                  </p>
+                  <div className="mt-1 flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: selectedCrashDistributionColor }}
+                      />
+                      <p className="min-w-0 truncate text-sm font-semibold text-foreground">
+                        {selectedNodeSummary?.name ?? selectedApiNodeId}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-baseline gap-3 text-right">
+                      <p className="text-sm font-semibold text-foreground">
+                        {crashDistributionSelectedPercent}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Crash {formatNumber(selectedCrashDistributionItem?.value ?? 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-hidden rounded-[var(--radius-lg)] border border-border/55 bg-background/45">
+                  <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                      Other nodes
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {otherCrashDistributionItems.length}
+                    </p>
+                  </div>
+                  <div className="max-h-[11rem] overflow-y-auto px-2 py-2">
+                    {otherCrashDistributionItems.length ? (
+                      <div className="space-y-2">
+                        {otherCrashDistributionItems.map((item) => (
+                          <div
+                            key={item.name}
+                            className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] px-2 py-2"
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span
+                                className="size-2.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: item.color }}
+                              />
+                              <span className="truncate text-sm text-foreground">
+                                {item.name}
+                              </span>
+                            </div>
+                            <div className="text-right text-sm">
+                              <p className="font-semibold text-foreground">
+                                {formatNumber(item.value)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex h-full min-h-[7rem] items-center justify-center px-3 text-center text-sm text-muted-foreground">
+                        暂无其他节点 Crash 数据。
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-full items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-border/60 bg-background/55 px-4 text-center text-sm text-muted-foreground">
+                暂无跨节点 Crash 分布数据。
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
