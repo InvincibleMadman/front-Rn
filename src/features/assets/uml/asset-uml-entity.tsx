@@ -21,7 +21,7 @@ function truncateText(value: string | number, maxChars: number): string {
 }
 
 function getAttributeColor(attribute: UmlAssetAttribute): string | undefined {
-  if (attribute.tone === "success") return "hsl(var(--chart-2))";
+  if (attribute.tone === "success") return "hsl(var(--chart-3))";
   if (attribute.tone === "warning") return "hsl(var(--accent-orange))";
   if (attribute.tone === "danger") return "hsl(var(--chart-4))";
   if (attribute.tone === "info") return "hsl(var(--accent-blue))";
@@ -84,6 +84,7 @@ export const AssetUmlEntity = memo(function AssetUmlEntity({
         strokeWidth={selected ? 2 : 1.2}
       />
       <rect x={0} y={0} width={size.width} height={headerHeight} rx={2} fill={tone.headerFill} />
+      {selected ? <rect x={0} y={0} width={4} height={size.height} rx={1} fill={tone.accent} /> : null}
       <line x1={0} y1={separatorY} x2={size.width} y2={separatorY} stroke={tone.border} strokeWidth={1} />
 
       {entity.stereotype ? (

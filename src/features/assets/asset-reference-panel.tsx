@@ -67,9 +67,9 @@ export const AssetReferencePanel = memo(function AssetReferencePanel({
   }, []);
 
   return (
-    <aside className="h-full min-h-[24rem] rounded-[var(--radius-xl)] border border-border bg-card">
-      <div className="flex h-full min-h-[24rem]">
-        <div className="flex w-11 shrink-0 flex-col items-center border-r border-border bg-background/70 py-3">
+    <aside className="h-full min-h-[24rem] overflow-hidden rounded-[var(--radius-xl)] border border-border bg-card">
+      <div className="flex h-full min-h-[24rem] overflow-hidden rounded-[inherit] bg-transparent">
+        <div className="flex w-11 shrink-0 flex-col items-center overflow-hidden rounded-l-[inherit] border-r border-border bg-background/70 py-3">
           <Button
             type="button"
             size="icon"
@@ -86,7 +86,7 @@ export const AssetReferencePanel = memo(function AssetReferencePanel({
         </div>
 
         {open ? (
-          <div className="min-w-0 flex-1 p-4">
+          <div className="min-w-0 flex-1 overflow-hidden rounded-r-[inherit] bg-card p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Reference</p>

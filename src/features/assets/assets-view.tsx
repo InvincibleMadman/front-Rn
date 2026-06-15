@@ -184,7 +184,7 @@ export function AssetsView(): JSX.Element {
 
   return (
     <div
-      className={isGraphTab ? "flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden" : "min-h-0 min-w-0 space-y-4"}
+      className={isGraphTab ? "flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden bg-transparent" : "min-h-0 min-w-0 space-y-4"}
       style={graphViewportStyle}
     >
       <AssetShell
@@ -192,6 +192,7 @@ export function AssetsView(): JSX.Element {
         protocols={protocols}
         summary={summary}
         view={activeTab}
+        className={isGraphTab ? "shrink-0 shadow-none" : undefined}
         onViewChange={setActiveTab}
         onProtocolChange={applyProtocolChange}
         onRefresh={refreshLightData}
@@ -233,7 +234,7 @@ export function AssetsView(): JSX.Element {
           </div>
         </div>
       ) : (
-        <div className={isGraphTab ? "min-h-0 min-w-0 flex-1 overflow-hidden" : "min-h-0 min-w-0"}>
+        <div className={isGraphTab ? "min-h-0 min-w-0 flex-1 overflow-hidden bg-transparent" : "min-h-0 min-w-0"}>
           <Suspense fallback={<AssetTabFallback />}>
             {mainContent}
           </Suspense>

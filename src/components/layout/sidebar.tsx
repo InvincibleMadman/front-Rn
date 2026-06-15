@@ -1,22 +1,22 @@
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivitySquare,
   Binary,
   Blocks,
+  Bug,
   ChevronDown,
   ChevronRight,
-  Gauge,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Bug,
+  FileText,
   FolderTree,
+  Gauge,
   History,
   Network,
-  FileText,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings2,
   Sparkles,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils/cn";
 import { useUiStore } from "@/stores/ui-store";
 
@@ -112,8 +112,8 @@ export function Sidebar(): JSX.Element {
         <Link
           to="/"
           className={cn(
-            "group flex min-w-0 items-center gap-4 rounded-[var(--radius-xl)] transition-colors hover:bg-white/6",
-            !showExpandedContent ? "justify-center p-2.5" : "px-2 py-2.5",
+            "group flex min-w-0 items-center gap-4 rounded-[var(--radius-xl)] px-2 py-2.5 transition-colors hover:bg-white/6",
+            !showExpandedContent && "justify-center",
           )}
         >
           <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--accent-blue))] via-[hsl(var(--accent-pink))] to-[hsl(var(--accent-orange))] text-white shadow-lg shadow-black/20">
@@ -121,8 +121,12 @@ export function Sidebar(): JSX.Element {
           </div>
           {showExpandedContent ? (
             <div className="min-w-0">
-              <p className="truncate text-[17px] font-semibold tracking-tight text-[hsl(var(--sidebar-text))]">ICP Fuzz</p>
-              <p className="truncate text-[12px] uppercase tracking-[0.18em] text-[hsl(var(--sidebar-text-subtle))]">Console</p>
+              <p className="truncate text-[20px] font-semibold tracking-tight text-[hsl(var(--sidebar-text))]">
+                ICP Fuzz
+              </p>
+              <p className="truncate text-[13px] uppercase tracking-[0.18em] text-[hsl(var(--sidebar-text-subtle))]">
+                Console
+              </p>
             </div>
           ) : null}
         </Link>
@@ -138,8 +142,8 @@ export function Sidebar(): JSX.Element {
                 to={item.to}
                 className={({ isActive }) =>
                   cn(
-                    "flex w-full items-center gap-7 rounded-[var(--radius-xl)] px-3 py-3 text-[17px] font-medium transition-all",
-                    !showExpandedContent && "justify-center px-0",
+                    "flex w-full items-center gap-7 rounded-[var(--radius-xl)] px-3 py-3 text-[18px] font-medium transition-all",
+                    !showExpandedContent && "justify-center",
                     isActive
                       ? "bg-white/12 text-[hsl(var(--sidebar-text))] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
                       : "text-[hsl(var(--sidebar-text-muted))] hover:bg-white/8 hover:text-[hsl(var(--sidebar-text))]",
@@ -156,8 +160,15 @@ export function Sidebar(): JSX.Element {
 
           <div
             className={cn(
-              "mt-3 rounded-[var(--radius-xl)] border p-1.5 transition-colors",
-              isOfflineRoute ? "border-transparent bg-white/6" : "border-transparent bg-transparent",
+              "transition-colors",
+              showExpandedContent
+                ? "mt-3 rounded-[var(--radius-xl)] border p-1.5"
+                : "rounded-[var(--radius-xl)] border border-transparent p-0",
+              showExpandedContent
+                ? isOfflineRoute
+                  ? "border-transparent bg-white/6"
+                  : "border-transparent bg-transparent"
+                : "",
             )}
           >
             <div className="flex items-center gap-1.5">
@@ -165,14 +176,21 @@ export function Sidebar(): JSX.Element {
                 to="/offline?tab=protocol"
                 onClick={() => setOfflineNavExpanded(true)}
                 className={cn(
-                  "flex min-w-0 flex-1 items-center gap-7 rounded-[var(--radius-lg)] px-3 py-3 text-[17px] font-medium transition-all",
-                  !showExpandedContent && "justify-center px-0",
+                  "flex min-w-0 flex-1 items-center gap-7 px-3 py-3 text-[18px] font-medium transition-all",
+                  showExpandedContent
+                    ? "rounded-[var(--radius-lg)]"
+                    : "w-full rounded-[var(--radius-xl)]",
+                  !showExpandedContent && "justify-center",
                   isOfflineRoute
-                    ? "text-[hsl(var(--sidebar-text))]"
+                    ? showExpandedContent
+                      ? "text-[hsl(var(--sidebar-text))]"
+                      : "bg-white/12 text-[hsl(var(--sidebar-text))] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
                     : "text-[hsl(var(--sidebar-text-muted))] hover:bg-white/8 hover:text-[hsl(var(--sidebar-text))]",
                 )}
               >
-                <Sparkles className="size-6 shrink-0" />
+                <span className="flex size-7 shrink-0 items-center justify-center">
+                  <Sparkles className="size-6 shrink-0" />
+                </span>
                 {showExpandedContent ? <span className="truncate">协议准备工作台</span> : null}
               </Link>
               {showExpandedContent ? (
@@ -182,7 +200,11 @@ export function Sidebar(): JSX.Element {
                   aria-label={showOfflineChildren ? "收起离线导航" : "展开离线导航"}
                   className="flex size-12 shrink-0 items-center justify-center rounded-lg text-[hsl(var(--sidebar-text-subtle))] transition-colors hover:bg-white/8 hover:text-[hsl(var(--sidebar-text))]"
                 >
-                  {showOfflineChildren ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
+                  {showOfflineChildren ? (
+                    <ChevronDown className="size-5" />
+                  ) : (
+                    <ChevronRight className="size-5" />
+                  )}
                 </button>
               ) : null}
             </div>
@@ -196,7 +218,7 @@ export function Sidebar(): JSX.Element {
                       key={item.tab}
                       to={`/offline?tab=${item.tab}`}
                       className={cn(
-                        "flex items-center rounded-[var(--radius-lg)] pl-12 pr-3.5 py-2.5 text-[16px] font-medium transition-colors",
+                        "flex items-center rounded-[var(--radius-lg)] py-2.5 pl-12 pr-3.5 text-[16px] font-medium transition-colors",
                         isActive
                           ? "bg-white/10 text-[hsl(var(--sidebar-text))]"
                           : "text-[hsl(var(--sidebar-text-subtle))] hover:bg-white/6 hover:text-[hsl(var(--sidebar-text-muted))]",
@@ -219,8 +241,8 @@ export function Sidebar(): JSX.Element {
                   to={item.to}
                   className={({ isActive }) =>
                     cn(
-                      "flex w-full items-center gap-7 rounded-[var(--radius-xl)] px-3 py-3 text-[17px] font-medium transition-all",
-                      !showExpandedContent && "justify-center px-0",
+                      "flex w-full items-center gap-7 rounded-[var(--radius-xl)] px-3 py-3 text-[18px] font-medium transition-all",
+                      !showExpandedContent && "justify-center",
                       isActive
                         ? "bg-white/12 text-[hsl(var(--sidebar-text))] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
                         : "text-[hsl(var(--sidebar-text-muted))] hover:bg-white/8 hover:text-[hsl(var(--sidebar-text))]",
@@ -244,12 +266,16 @@ export function Sidebar(): JSX.Element {
           onClick={toggleCollapsed}
           aria-label={collapsed ? "展开导航栏" : "收起导航栏"}
           className={cn(
-            "flex w-full items-center gap-9 rounded-[var(--radius-xl)] px-3 py-3 text-[17px] font-medium text-[hsl(var(--sidebar-text-muted))] transition-colors hover:bg-white/8 hover:text-[hsl(var(--sidebar-text))]",
-            !showExpandedContent && "justify-center px-0",
+            "flex w-full items-center gap-9 rounded-[var(--radius-xl)] px-3 py-3 text-[18px] font-medium text-[hsl(var(--sidebar-text-muted))] transition-colors hover:bg-white/8 hover:text-[hsl(var(--sidebar-text))]",
+            !showExpandedContent && "justify-center",
           )}
         >
           <span className="flex size-7 shrink-0 items-center justify-center">
-            {collapsed ? <PanelLeftOpen className="size-6 shrink-0" /> : <PanelLeftClose className="size-4.5 shrink-0" />}
+            {collapsed ? (
+              <PanelLeftOpen className="size-6 shrink-0" />
+            ) : (
+              <PanelLeftClose className="size-[1.125rem] shrink-0" />
+            )}
           </span>
           {showExpandedContent ? <span>收起导航</span> : null}
         </button>

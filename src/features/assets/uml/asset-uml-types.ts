@@ -77,8 +77,8 @@ const UML_ENTITY_MIN_HEIGHT = 96;
 
 export function getDefaultUmlEntityWidth(kind: UmlAssetKind): number {
   if (kind === "catalog") return 360;
-  if (kind === "protocol") return 250;
-  return 220;
+  if (kind === "protocol") return 260;
+  return 230;
 }
 
 export function getUmlEntityHeaderHeight(entity: Pick<UmlAssetEntity, "stereotype" | "subtitle">): number {

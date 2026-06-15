@@ -246,16 +246,16 @@ export function AssetOverviewMindmap({
 
   const toolbar = (
     <>
-      <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+      <span className="rounded-full border border-border/70 bg-transparent px-2.5 py-1 text-xs text-muted-foreground">
         协议 {totalProtocols}
       </span>
-      <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+      <span className="rounded-full border border-border/70 bg-transparent px-2.5 py-1 text-xs text-muted-foreground">
         已加载 {loadedProtocols}
       </span>
-      <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+      <span className="rounded-full border border-border/70 bg-transparent px-2.5 py-1 text-xs text-muted-foreground">
         就绪 {readyProtocols}
       </span>
-      <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+      <span className="rounded-full border border-border/70 bg-transparent px-2.5 py-1 text-xs text-muted-foreground">
         降级 {degradedProtocols.length}
       </span>
       <div className="ml-auto flex items-center gap-2">

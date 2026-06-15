@@ -1,14 +1,12 @@
 import type { ProtocolAssetSummary } from "@/types/api/assets";
 import type { AssetGraphModel } from "@/features/assets/asset-utils";
 import { buildWorkspaceRef, normalizeProtocol } from "@/features/assets/asset-utils";
-import {
-  layoutProtocolLineage,
-} from "@/features/assets/uml/asset-uml-layout";
+import { layoutProtocolSmartUmlLineage } from "@/features/assets/uml/asset-uml-layout";
 import type {
   UmlAssetEntity,
   UmlAssetRelation,
-  UmlDiagramModel,
   UmlAssetStatus,
+  UmlDiagramModel,
 } from "@/features/assets/uml/asset-uml-types";
 
 interface CountSnapshot {
@@ -29,7 +27,6 @@ interface CountSnapshot {
 
 function countOf(model: AssetGraphModel, key: keyof CountSnapshot): number {
   if (key === "crash") {
-    // Crash output may be absent in older mindmap payloads; fall back to vulns-derived count.
     return Math.max(0, model.counts.crash ?? model.counts.vulns ?? 0);
   }
 
@@ -40,7 +37,11 @@ function countOf(model: AssetGraphModel, key: keyof CountSnapshot): number {
   return Math.max(0, model.counts[key] ?? 0);
 }
 
-function statusOf(model: AssetGraphModel, key: keyof CountSnapshot | "protocol", fallbackReady = false): UmlAssetStatus {
+function statusOf(
+  model: AssetGraphModel,
+  key: keyof CountSnapshot | "protocol",
+  fallbackReady = false,
+): UmlAssetStatus {
   const raw = String(model.statuses[key] ?? "").trim().toLowerCase();
   if (raw === "ready" || raw === "available" || raw === "empty" || raw === "degraded" || raw === "running") {
     return raw;
@@ -50,12 +51,12 @@ function statusOf(model: AssetGraphModel, key: keyof CountSnapshot | "protocol",
     return fallbackReady || Object.values(model.counts).some((value) => Number(value) > 0) ? "ready" : "empty";
   }
 
-  return countOf(model, key as keyof CountSnapshot) > 0 ? (fallbackReady && key === "source" ? "ready" : "available") : "empty";
+  return countOf(model, key) > 0
+    ? (fallbackReady && key === "source" ? "ready" : "available")
+    : "empty";
 }
 
-function entity(
-  partial: Omit<UmlAssetEntity, "x" | "y">,
-): UmlAssetEntity {
+function createEntity(partial: Omit<UmlAssetEntity, "x" | "y">): UmlAssetEntity {
   return {
     ...partial,
     x: 0,
@@ -63,13 +64,8 @@ function entity(
   };
 }
 
-function buildProtocolAssetEntities(
-  protocol: string,
-  model: AssetGraphModel,
-  summary?: ProtocolAssetSummary | null,
-): UmlAssetEntity[] {
-  const normalizedProtocol = normalizeProtocol(protocol);
-  const counts: CountSnapshot = {
+function buildCounts(model: AssetGraphModel): CountSnapshot {
+  return {
     source: countOf(model, "source"),
     specs: countOf(model, "specs"),
     vuldocs: countOf(model, "vuldocs"),
@@ -84,25 +80,46 @@ function buildProtocolAssetEntities(
     vulns: countOf(model, "vulns"),
     history: countOf(model, "history"),
   };
+}
+
+function buildProtocolAssetEntities(
+  protocol: string,
+  model: AssetGraphModel,
+  summary?: ProtocolAssetSummary | null,
+): UmlAssetEntity[] {
+  const normalizedProtocol = normalizeProtocol(protocol);
+  const counts = buildCounts(model);
+  const protocolStatus = statusOf(model, "protocol", summary?.ready);
+  const sourceRef = buildWorkspaceRef(normalizedProtocol, "source");
+  const specsRef = buildWorkspaceRef(normalizedProtocol, "specs");
+  const vuldocsRef = buildWorkspaceRef(normalizedProtocol, "vuldocs");
+  const kbRef = buildWorkspaceRef(normalizedProtocol, "kb");
+  const seedsRef = buildWorkspaceRef(normalizedProtocol, "seeds");
+  const riskRef = buildWorkspaceRef(normalizedProtocol, "risk");
+  const buildRef = buildWorkspaceRef(normalizedProtocol, "build");
+  const jobsRef = buildWorkspaceRef(normalizedProtocol, "jobs");
+  const debugRef = buildWorkspaceRef(normalizedProtocol, "debug");
+  const reportsRef = buildWorkspaceRef(normalizedProtocol, "reports");
+  const historyRef = buildWorkspaceRef(normalizedProtocol, "history");
 
   return [
-    entity({
+    createEntity({
       id: `protocol:${normalizedProtocol}`,
       title: normalizedProtocol,
       stereotype: "<<protocol>>",
       kind: "protocol",
-      status: statusOf(model, "protocol", summary?.ready),
+      status: protocolStatus,
       protocol: normalizedProtocol,
       scope: "source",
       attributes: [
-        { key: "status", value: statusOf(model, "protocol", summary?.ready) },
+        { key: "status", value: protocolStatus },
         { key: "source files", value: counts.source, tone: "info" },
         { key: "jobs", value: counts.jobs },
         { key: "crash", value: counts.crash, tone: "warning" },
         { key: "vulns", value: counts.vulns, tone: "danger" },
       ],
     }),
-    entity({
+    createEntity({
       id: `source:${normalizedProtocol}`,
       title: "SourceWorkspace",
       stereotype: "<<source>>",
@@ -110,14 +127,14 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "source", summary?.ready),
       protocol: normalizedProtocol,
       scope: "source",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "source"),
+      workspaceRef: sourceRef,
       attributes: [
         { key: "files", value: counts.source, tone: "info" },
         { key: "type", value: "source root" },
-        { key: "ref", value: buildWorkspaceRef(normalizedProtocol, "source"), muted: true },
+        { key: "ref", value: sourceRef, muted: true },
       ],
     }),
-    entity({
+    createEntity({
       id: `specs:${normalizedProtocol}`,
       title: "ProtocolSpec",
       stereotype: "<<analysis>>",
@@ -125,13 +142,13 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "specs"),
       protocol: normalizedProtocol,
       scope: "specs",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "specs"),
+      workspaceRef: specsRef,
       attributes: [
         { key: "specs", value: counts.specs },
         { key: "type", value: "protocol facts" },
       ],
     }),
-    entity({
+    createEntity({
       id: `vuldocs:${normalizedProtocol}`,
       title: "VulDoc",
       stereotype: "<<document>>",
@@ -139,13 +156,13 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "vuldocs"),
       protocol: normalizedProtocol,
       scope: "vuldocs",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "vuldocs"),
+      workspaceRef: vuldocsRef,
       attributes: [
         { key: "docs", value: counts.vuldocs },
         { key: "type", value: "raw/distilled" },
       ],
     }),
-    entity({
+    createEntity({
       id: `kb:${normalizedProtocol}`,
       title: "KnowledgeBase",
       stereotype: "<<kb>>",
@@ -153,13 +170,13 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "kb"),
       protocol: normalizedProtocol,
       scope: "kb",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "kb"),
+      workspaceRef: kbRef,
       attributes: [
         { key: "entries", value: counts.kb },
         { key: "type", value: "vuln facts" },
       ],
     }),
-    entity({
+    createEntity({
       id: `seeds:${normalizedProtocol}`,
       title: "SeedCorpus",
       stereotype: "<<seed>>",
@@ -167,13 +184,13 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "seeds"),
       protocol: normalizedProtocol,
       scope: "seeds",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "seeds"),
+      workspaceRef: seedsRef,
       attributes: [
         { key: "seeds", value: counts.seeds },
         { key: "type", value: "text/bin" },
       ],
     }),
-    entity({
+    createEntity({
       id: `risk:${normalizedProtocol}`,
       title: "RiskAnalysis",
       stereotype: "<<risk>>",
@@ -181,13 +198,13 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "risk"),
       protocol: normalizedProtocol,
       scope: "risk",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "risk"),
+      workspaceRef: riskRef,
       attributes: [
         { key: "analyses", value: counts.risk, tone: "warning" },
         { key: "type", value: "risk paths" },
       ],
     }),
-    entity({
+    createEntity({
       id: `instrumented:${normalizedProtocol}`,
       title: "InstrumentedBuild",
       stereotype: "<<instrumented>>",
@@ -195,13 +212,13 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "instrumented"),
       protocol: normalizedProtocol,
       scope: "build",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "build"),
+      workspaceRef: buildRef,
       attributes: [
         { key: "artifacts", value: counts.instrumented },
         { key: "type", value: "instrumented" },
       ],
     }),
-    entity({
+    createEntity({
       id: `jobs:${normalizedProtocol}`,
       title: "FuzzJob",
       stereotype: "<<job>>",
@@ -209,13 +226,13 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "jobs"),
       protocol: normalizedProtocol,
       scope: "jobs",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "jobs"),
+      workspaceRef: jobsRef,
       attributes: [
         { key: "jobs", value: counts.jobs },
         { key: "status", value: counts.jobs > 0 ? "total" : "empty" },
       ],
     }),
-    entity({
+    createEntity({
       id: `crash:${normalizedProtocol}`,
       title: "CrashArtifact",
       stereotype: "<<crash>>",
@@ -223,13 +240,13 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "crash"),
       protocol: normalizedProtocol,
       scope: "jobs",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "jobs"),
+      workspaceRef: jobsRef,
       attributes: [
         { key: "crash", value: counts.crash, tone: "warning" },
         { key: "type", value: "crash output" },
       ],
     }),
-    entity({
+    createEntity({
       id: `debug:${normalizedProtocol}`,
       title: "DebugSession",
       stereotype: "<<debug>>",
@@ -237,13 +254,13 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "debug"),
       protocol: normalizedProtocol,
       scope: "debug",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "debug"),
+      workspaceRef: debugRef,
       attributes: [
         { key: "sessions", value: counts.debug },
         { key: "type", value: "gdb/llm" },
       ],
     }),
-    entity({
+    createEntity({
       id: `reports:${normalizedProtocol}`,
       title: "Report",
       stereotype: "<<report>>",
@@ -251,13 +268,13 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "reports"),
       protocol: normalizedProtocol,
       scope: "reports",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "reports"),
+      workspaceRef: reportsRef,
       attributes: [
         { key: "reports", value: counts.reports },
         { key: "type", value: "task report" },
       ],
     }),
-    entity({
+    createEntity({
       id: `vulns:${normalizedProtocol}`,
       title: "VulnerabilityRecord",
       stereotype: "<<vulnerability>>",
@@ -265,13 +282,13 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "vulns"),
       protocol: normalizedProtocol,
       scope: "history",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "history"),
+      workspaceRef: historyRef,
       attributes: [
         { key: "vulns", value: counts.vulns, tone: "danger" },
         { key: "type", value: "confirmed/recorded" },
       ],
     }),
-    entity({
+    createEntity({
       id: `history:${normalizedProtocol}`,
       title: "History",
       stereotype: "<<history>>",
@@ -279,188 +296,204 @@ function buildProtocolAssetEntities(
       status: statusOf(model, "history"),
       protocol: normalizedProtocol,
       scope: "history",
-      workspaceRef: buildWorkspaceRef(normalizedProtocol, "history"),
+      workspaceRef: historyRef,
       attributes: [
         { key: "records", value: counts.history },
-        { key: "type", value: model.empty ? "导入源码并完成流程后生成真实资产关系" : "protocol timeline" },
+        { key: "type", value: model.empty ? "real lineage will appear after source import and processing" : "protocol timeline" },
       ],
     }),
   ];
 }
 
-export function buildProtocolAssetRelations(protocol: string): UmlAssetRelation[] {
-  const normalizedProtocol = normalizeProtocol(protocol);
-  const protocolId = `protocol:${normalizedProtocol}`;
-  return [
+interface RelationRule {
+  source: string;
+  target: string;
+  label: string;
+  kind: NonNullable<UmlAssetRelation["kind"]>;
+  description: string;
+  inferred?: boolean;
+}
+
+export function buildProtocolUmlRelations(
+  entities: UmlAssetEntity[],
+  counts: CountSnapshot,
+): UmlAssetRelation[] {
+  const entityIds = new Set(entities.map((entity) => entity.id));
+  const protocolId = entities.find((entity) => entity.kind === "protocol")?.id ?? "";
+  const sourceId = entities.find((entity) => entity.kind === "source")?.id ?? "";
+  const specsId = entities.find((entity) => entity.kind === "specs")?.id ?? "";
+  const vuldocsId = entities.find((entity) => entity.kind === "vuldocs")?.id ?? "";
+  const kbId = entities.find((entity) => entity.kind === "kb")?.id ?? "";
+  const seedsId = entities.find((entity) => entity.kind === "seeds")?.id ?? "";
+  const riskId = entities.find((entity) => entity.kind === "risk")?.id ?? "";
+  const instrumentedId = entities.find((entity) => entity.kind === "instrumented")?.id ?? "";
+  const jobsId = entities.find((entity) => entity.kind === "jobs")?.id ?? "";
+  const crashId = entities.find((entity) => entity.kind === "crash")?.id ?? "";
+  const debugId = entities.find((entity) => entity.kind === "debug")?.id ?? "";
+  const reportsId = entities.find((entity) => entity.kind === "reports")?.id ?? "";
+  const vulnsId = entities.find((entity) => entity.kind === "vulns")?.id ?? "";
+
+  const rules: RelationRule[] = [
     {
-      id: `${protocolId}->source`,
       source: protocolId,
-      target: `source:${normalizedProtocol}`,
+      target: sourceId,
       label: "contains",
       kind: "composition",
-      description: "协议项目包含源码工作区，这是所有后续资产的源头。",
+      description: "Protocol contains the source workspace as its root asset.",
     },
     {
-      id: `${protocolId}->specs`,
       source: protocolId,
-      target: `specs:${normalizedProtocol}`,
+      target: specsId,
       label: "owns analysis",
       kind: "composition",
-      description: "协议级分析结果属于该协议。",
+      description: "Protocol-level analysis results belong to this protocol.",
     },
     {
-      id: `${protocolId}->vuldocs`,
       source: protocolId,
-      target: `vuldocs:${normalizedProtocol}`,
+      target: vuldocsId,
       label: "owns docs",
       kind: "composition",
-      description: "协议文档资产属于该协议。",
+      description: "Raw or distilled vulnerability documents stay inside the protocol workspace.",
     },
     {
-      id: `${protocolId}->kb`,
       source: protocolId,
-      target: `kb:${normalizedProtocol}`,
+      target: kbId,
       label: "owns kb",
       kind: "composition",
-      description: "知识库资产归属于该协议。",
+      description: "Knowledge base entries are protocol-scoped assets.",
     },
     {
-      id: `source->specs:${normalizedProtocol}`,
-      source: `source:${normalizedProtocol}`,
-      target: `specs:${normalizedProtocol}`,
+      source: sourceId,
+      target: specsId,
       label: "extract",
       kind: "dependency",
-      description: "源码被分析后提取出协议事实。",
+      description: "Protocol facts are extracted from the source workspace.",
     },
     {
-      id: `vuldocs->kb:${normalizedProtocol}`,
-      source: `vuldocs:${normalizedProtocol}`,
-      target: `kb:${normalizedProtocol}`,
+      source: vuldocsId,
+      target: kbId,
       label: "distill",
       kind: "dependency",
-      description: "漏洞文档蒸馏为结构化知识条目。",
+      description: "Documents are distilled into reusable knowledge base facts.",
     },
     {
-      id: `source->seeds:${normalizedProtocol}`,
-      source: `source:${normalizedProtocol}`,
-      target: `seeds:${normalizedProtocol}`,
+      source: sourceId,
+      target: seedsId,
       label: "seed gen",
       kind: "dependency",
-      description: "源码或协议事实指导种子生成。",
+      description: "Source workspace guides seed generation.",
     },
     {
-      id: `kb->seeds:${normalizedProtocol}`,
-      source: `kb:${normalizedProtocol}`,
-      target: `seeds:${normalizedProtocol}`,
+      source: kbId,
+      target: seedsId,
       label: "kb guide",
       kind: "dependency",
-      description: "知识库为种子设计提供约束和提示。",
+      description: "Knowledge base facts constrain and improve generated seeds.",
     },
     {
-      id: `source->risk:${normalizedProtocol}`,
-      source: `source:${normalizedProtocol}`,
-      target: `risk:${normalizedProtocol}`,
+      source: sourceId,
+      target: riskId,
       label: "risk scan",
       kind: "dependency",
-      description: "源码被风险分析流程扫描，形成路径与热点。",
+      description: "Source workspace is scanned for protocol risks and hot paths.",
     },
     {
-      id: `risk->instrumented:${normalizedProtocol}`,
-      source: `risk:${normalizedProtocol}`,
-      target: `instrumented:${normalizedProtocol}`,
+      source: riskId,
+      target: instrumentedId,
       label: "instrument",
       kind: "dependency",
-      description: "风险分析指导插桩与构建加工。",
+      description: "Risk analysis guides what should be instrumented.",
     },
     {
-      id: `source->instrumented:${normalizedProtocol}`,
-      source: `source:${normalizedProtocol}`,
-      target: `instrumented:${normalizedProtocol}`,
+      source: sourceId,
+      target: instrumentedId,
       label: "build input",
       kind: "dependency",
-      description: "源码是插桩构建的输入。",
+      description: "Source workspace is the build input for the instrumented target.",
     },
     {
-      id: `seeds->jobs:${normalizedProtocol}`,
-      source: `seeds:${normalizedProtocol}`,
-      target: `jobs:${normalizedProtocol}`,
+      source: seedsId,
+      target: jobsId,
       label: "fuzz input",
       kind: "flow",
-      description: "种子语料流入 fuzz 任务作为输入。",
+      description: "Seeds flow into fuzz jobs as the runtime input corpus.",
     },
     {
-      id: `instrumented->jobs:${normalizedProtocol}`,
-      source: `instrumented:${normalizedProtocol}`,
-      target: `jobs:${normalizedProtocol}`,
+      source: instrumentedId,
+      target: jobsId,
       label: "target",
       kind: "flow",
-      description: "插桩构建产物是 fuzz 任务的目标。",
+      description: "The instrumented build is the execution target of fuzz jobs.",
     },
     {
-      id: `jobs->crash:${normalizedProtocol}`,
-      source: `jobs:${normalizedProtocol}`,
-      target: `crash:${normalizedProtocol}`,
+      source: jobsId,
+      target: crashId,
       label: "crash/hang",
       kind: "flow",
-      description: "fuzz 任务可能产出 crash 或 hang。",
+      description: "Fuzz jobs may produce crashes or hangs.",
+      inferred: counts.crash === 0,
     },
     {
-      id: `crash->vulns:${normalizedProtocol}`,
-      source: `crash:${normalizedProtocol}`,
-      target: `vulns:${normalizedProtocol}`,
-      label: "may confirm",
-      kind: "dependency",
-      description: "Crash 只是异常信号，后续分析后才可能确认漏洞。",
-    },
-    {
-      id: `crash->debug:${normalizedProtocol}`,
-      source: `crash:${normalizedProtocol}`,
-      target: `debug:${normalizedProtocol}`,
+      source: crashId,
+      target: debugId,
       label: "debug",
       kind: "dependency",
-      description: "Crash 进入调试会话以定位成因。",
+      description: "Crash artifacts are debugged to identify root cause and exploitability.",
+      inferred: counts.crash === 0 && counts.debug === 0,
     },
     {
-      id: `debug->vulns:${normalizedProtocol}`,
-      source: `debug:${normalizedProtocol}`,
-      target: `vulns:${normalizedProtocol}`,
+      source: debugId,
+      target: vulnsId,
       label: "classify",
       kind: "dependency",
-      description: "调试结果帮助判定是否形成漏洞记录。",
+      description: "Debug results classify whether a crash becomes a confirmed vulnerability record.",
+      inferred: counts.vulns === 0,
     },
     {
-      id: `jobs->reports:${normalizedProtocol}`,
-      source: `jobs:${normalizedProtocol}`,
-      target: `reports:${normalizedProtocol}`,
+      source: crashId,
+      target: vulnsId,
+      label: "may confirm",
+      kind: "dependency",
+      description: "A crash is only a signal. It may confirm a vulnerability after follow-up analysis.",
+      inferred: counts.vulns === 0,
+    },
+    {
+      source: jobsId,
+      target: reportsId,
       label: "report",
       kind: "dependency",
-      description: "任务执行会产出阶段性或最终报告。",
+      description: "Fuzz jobs produce task or stage reports.",
+      inferred: counts.reports === 0,
     },
     {
-      id: `reports->vulns:${normalizedProtocol}`,
-      source: `reports:${normalizedProtocol}`,
-      target: `vulns:${normalizedProtocol}`,
+      source: reportsId,
+      target: vulnsId,
       label: "reference",
       kind: "dependency",
-      description: "报告会引用漏洞记录或确认结论。",
+      description: "Reports reference confirmed vulnerability records when available.",
+      inferred: counts.vulns === 0,
     },
     {
-      id: `vulns->protocol:${normalizedProtocol}`,
-      source: `vulns:${normalizedProtocol}`,
+      source: vulnsId,
       target: protocolId,
       label: "recorded in",
       kind: "aggregation",
-      description: "漏洞记录属于协议级历史，不代表每个 crash 都是漏洞。",
-    },
-    {
-      id: `vulns->history:${normalizedProtocol}`,
-      source: `vulns:${normalizedProtocol}`,
-      target: `history:${normalizedProtocol}`,
-      label: "timeline",
-      kind: "association",
-      description: "漏洞记录进入协议历史时间线。",
+      description: "Vulnerability records belong to the protocol history. Not every crash becomes a vulnerability.",
+      inferred: counts.vulns === 0,
     },
   ];
+
+  return rules
+    .filter((rule) => Boolean(rule.source) && Boolean(rule.target) && entityIds.has(rule.source) && entityIds.has(rule.target))
+    .map((rule) => ({
+      id: `${rule.source}->${rule.target}:${rule.label}`,
+      source: rule.source,
+      target: rule.target,
+      label: rule.label,
+      kind: rule.kind,
+      description: rule.description,
+      inferred: rule.inferred,
+    }));
 }
 
 export function buildProtocolLineageDiagram(
@@ -468,7 +501,8 @@ export function buildProtocolLineageDiagram(
   model: AssetGraphModel,
   summary?: ProtocolAssetSummary | null,
 ): UmlDiagramModel {
-  const entities = buildProtocolAssetEntities(protocol, model, summary);
-  const relations = buildProtocolAssetRelations(protocol);
-  return layoutProtocolLineage(normalizeProtocol(protocol), entities, relations);
+  const normalizedProtocol = normalizeProtocol(protocol);
+  const entities = buildProtocolAssetEntities(normalizedProtocol, model, summary);
+  const relations = buildProtocolUmlRelations(entities, buildCounts(model));
+  return layoutProtocolSmartUmlLineage(normalizedProtocol, entities, relations);
 }

@@ -1,15 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, CircleDot, MoonStar, SunMedium } from "lucide-react";
-import { systemApi } from "@/lib/api/services/system";
-import { useUiStore } from "@/stores/ui-store";
 import { NodeSwitcherDropdown } from "@/components/common/node-switcher-dropdown";
 import { Button } from "@/components/ui/button";
+import { systemApi } from "@/lib/api/services/system";
+import { useUiStore } from "@/stores/ui-store";
 
 export function Topbar(): JSX.Element {
   const theme = useUiStore((state) => state.theme);
   const toggleTheme = useUiStore((state) => state.toggleTheme);
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
-
   const selectedNodeId = useUiStore((state) => state.selectedApiNodeId);
 
   const backendHealthQuery = useQuery({
@@ -36,9 +35,13 @@ export function Topbar(): JSX.Element {
     >
       <div className="flex h-full items-center gap-4 px-5">
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">协议·FUZZ·解耦</p>
+          <p className="text-[12px] uppercase tracking-[0.22em] text-muted-foreground">
+            Protocol Fuzz Console
+          </p>
           <div className="flex min-w-0 items-center gap-3">
-            <h2 className="truncate text-xl font-semibold tracking-tight">ICS协议模糊测试系统</h2>
+            <h2 className="truncate text-[26px] font-semibold tracking-tight">
+              ICS 协议模糊测试系统
+            </h2>
             <span className="hidden rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground lg:inline-flex">
               POWERED BY ICPilot-AFL
             </span>
@@ -58,7 +61,9 @@ export function Topbar(): JSX.Element {
             ) : (
               <CircleDot className="size-3.5 animate-pulse text-warning" />
             )}
-            <span className="ml-2 whitespace-nowrap text-xs font-medium text-foreground">{statusLabel}</span>
+            <span className="ml-2 whitespace-nowrap text-[13px] font-medium text-foreground">
+              {statusLabel}
+            </span>
           </div>
 
           <Button
@@ -69,7 +74,11 @@ export function Topbar(): JSX.Element {
             onClick={toggleTheme}
             aria-label="切换主题"
           >
-            {theme === "dark" ? <SunMedium className="size-4.5" /> : <MoonStar className="size-4.5" />}
+            {theme === "dark" ? (
+              <SunMedium className="size-[1.125rem]" />
+            ) : (
+              <MoonStar className="size-[1.125rem]" />
+            )}
           </Button>
         </div>
       </div>

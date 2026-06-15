@@ -13,6 +13,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { DashboardMetricRing } from "@/features/dashboard/dashboard-metric-ring";
 import {
   Card,
   CardContent,
@@ -85,11 +86,19 @@ interface MetricCardProps {
   value: string;
   description: string;
   icon: typeof Activity;
-  option: ChartOption;
+  option?: ChartOption;
   chips?: ChipItem[];
   hero?: boolean;
   accent?: "blue" | "cyan" | "emerald" | "amber" | "violet" | "rose" | "slate";
-  chartHeight?: number;
+  chartHeight?: number | string;
+  ring?: {
+    value: number;
+    max: number;
+    centerValue: string | number;
+    label?: string;
+    size?: number | string;
+    strokeWidth?: number;
+  };
 }
 
 function emptySparklineOption(color = "#94a3b8"): ChartOption {
@@ -507,40 +516,40 @@ const metricAccentStyle = {
     ring: "ring-[hsl(var(--accent-blue)/0.18)]",
   },
   cyan: {
-    text: "text-cyan-600 dark:text-cyan-300",
-    icon: "text-cyan-600 dark:text-cyan-300",
-    iconBg: "bg-cyan-500/10",
-    ring: "ring-cyan-500/20",
+    text: "text-[hsl(var(--chart-6))]",
+    icon: "text-[hsl(var(--chart-6))]",
+    iconBg: "bg-[hsl(var(--chart-6)/0.12)]",
+    ring: "ring-[hsl(var(--chart-6)/0.18)]",
   },
   emerald: {
-    text: "text-emerald-600 dark:text-emerald-300",
-    icon: "text-emerald-600 dark:text-emerald-300",
-    iconBg: "bg-emerald-500/10",
-    ring: "ring-emerald-500/20",
+    text: "text-[hsl(var(--color-success))]",
+    icon: "text-[hsl(var(--color-success))]",
+    iconBg: "bg-[hsl(var(--color-success)/0.12)]",
+    ring: "ring-[hsl(var(--color-success)/0.18)]",
   },
   amber: {
-    text: "text-amber-600 dark:text-amber-300",
-    icon: "text-amber-600 dark:text-amber-300",
-    iconBg: "bg-amber-500/10",
-    ring: "ring-amber-500/20",
+    text: "text-[hsl(var(--accent-orange))]",
+    icon: "text-[hsl(var(--accent-orange))]",
+    iconBg: "bg-[hsl(var(--accent-orange)/0.12)]",
+    ring: "ring-[hsl(var(--accent-orange)/0.18)]",
   },
   violet: {
-    text: "text-violet-600 dark:text-violet-300",
-    icon: "text-violet-600 dark:text-violet-300",
-    iconBg: "bg-violet-500/10",
-    ring: "ring-violet-500/20",
+    text: "text-[hsl(var(--chart-5))]",
+    icon: "text-[hsl(var(--chart-5))]",
+    iconBg: "bg-[hsl(var(--chart-5)/0.12)]",
+    ring: "ring-[hsl(var(--chart-5)/0.18)]",
   },
   rose: {
-    text: "text-rose-600 dark:text-rose-300",
-    icon: "text-rose-600 dark:text-rose-300",
-    iconBg: "bg-rose-500/10",
-    ring: "ring-rose-500/20",
+    text: "text-[hsl(var(--chart-4))]",
+    icon: "text-[hsl(var(--chart-4))]",
+    iconBg: "bg-[hsl(var(--chart-4)/0.12)]",
+    ring: "ring-[hsl(var(--chart-4)/0.18)]",
   },
   slate: {
-    text: "text-slate-600 dark:text-slate-300",
-    icon: "text-slate-600 dark:text-slate-300",
-    iconBg: "bg-slate-500/10",
-    ring: "ring-slate-500/20",
+    text: "text-[hsl(var(--text-secondary))]",
+    icon: "text-[hsl(var(--text-secondary))]",
+    iconBg: "bg-[hsl(var(--text-secondary)/0.12)]",
+    ring: "ring-[hsl(var(--text-secondary)/0.18)]",
   },
 } satisfies Record<
   NonNullable<MetricCardProps["accent"]>,
@@ -556,17 +565,24 @@ function MetricCard({
   chips = [],
   hero = false,
   accent = "blue",
-  chartHeight = hero ? 104 : 84,
+  chartHeight = hero ? "6.5rem" : "5.25rem",
+  ring,
 }: MetricCardProps): JSX.Element {
   const style = metricAccentStyle[accent];
+  const [ringActive, setRingActive] = useState(false);
+  const hasRing = Boolean(ring);
 
   return (
     <Card
+      onMouseEnter={hasRing ? () => setRingActive(true) : undefined}
+      onMouseLeave={hasRing ? () => setRingActive(false) : undefined}
+      onFocus={hasRing ? () => setRingActive(true) : undefined}
+      onBlur={hasRing ? () => setRingActive(false) : undefined}
       className={cn(
         "overflow-hidden border-border/65 bg-[hsl(var(--bg-surface))] shadow-[0_14px_32px_rgba(15,23,42,0.07)]",
         "dark:border-[hsl(var(--border)/0.9)] dark:bg-[hsl(var(--bg-surface-elevated))] dark:shadow-[0_18px_38px_rgba(0,0,0,0.26)]",
         "transition-shadow hover:shadow-[0_18px_42px_rgba(15,23,42,0.10)]",
-        hero ? "min-h-[184px]" : "min-h-[142px]",
+        hero ? "min-h-[11.5rem]" : "min-h-[8.875rem]",
       )}
     >
       <CardContent
@@ -574,7 +590,7 @@ function MetricCard({
           "grid h-full gap-3 p-4",
           hero
             ? "grid-cols-[minmax(0,1fr)_minmax(8.5rem,0.82fr)]"
-            : "grid-cols-[minmax(0,1fr)_6.5rem]",
+            : "grid-cols-[minmax(0,1fr)_minmax(5.75rem,6.5rem)]",
         )}
       >
         <div className="flex min-w-0 flex-col justify-between gap-3">
@@ -592,10 +608,10 @@ function MetricCard({
                 <Icon className={cn(hero ? "size-5" : "size-4")} />
               </div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-foreground">
+                <p className="truncate text-[15px] font-semibold leading-5 text-foreground">
                   {title}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="truncate text-[13px] text-muted-foreground">
                   {description}
                 </p>
               </div>
@@ -624,8 +640,28 @@ function MetricCard({
             </div>
           ) : null}
         </div>
-        <div className="relative min-w-0 self-center rounded-2xl border border-border/45 bg-background/55 p-2">
-          <EchartsBase option={option} height={chartHeight} />
+        <div
+          className={cn(
+            "relative min-w-0 self-center",
+            hasRing
+              ? "flex items-center justify-center p-1"
+              : "rounded-2xl border border-border/45 bg-background/55 p-2",
+          )}
+        >
+          {ring ? (
+            <DashboardMetricRing
+              value={ring.value}
+              max={ring.max}
+              centerValue={ring.centerValue}
+              label={ring.label ?? title}
+              size={ring.size ?? "min(5.75rem, 100%)"}
+              strokeWidth={ring.strokeWidth ?? 10}
+              colorClassName={style.text}
+              active={ringActive}
+            />
+          ) : option ? (
+            <EchartsBase option={option} height={chartHeight} />
+          ) : null}
         </div>
       </CardContent>
     </Card>
@@ -815,6 +851,18 @@ export function DashboardView(): JSX.Element {
     );
   }, [metrics.debugSessions, palette]);
 
+  const protocolAssetDisplayTotal =
+    metrics.protocolAssets.protocolCount || metrics.protocolAssets.total;
+  const protocolAssetMax = Math.max(
+    recordTotal(metrics.protocolAssets.byScope),
+    metrics.protocolAssets.total,
+    metrics.protocolAssets.protocolCount,
+    0,
+  );
+  const dominantDebugStatus =
+    topRecordEntries(metrics.debugSessions.byStatus, 1)[0]?.[1] ??
+    metrics.debugSessions.total;
+
   const reportsOption = useMemo<ChartOption>(
     () =>
       reportActivityOption(
@@ -999,8 +1047,12 @@ export function DashboardView(): JSX.Element {
           value={`${formatNumber(metrics.nodeStatus.online)} / ${formatNumber(metrics.nodeStatus.total)}`}
           description="Online backend nodes"
           icon={Network}
-          option={nodeStatusOption}
-          chartHeight={86}
+          ring={{
+            value: metrics.nodeStatus.online,
+            max: metrics.nodeStatus.total,
+            centerValue: `${metrics.nodeStatus.onlinePercent}%`,
+            label: "Online node ratio",
+          }}
           chips={[
             {
               label: "Online",
@@ -1017,14 +1069,15 @@ export function DashboardView(): JSX.Element {
         <MetricCard
           accent="cyan"
           title="协议资产数"
-          value={formatNumber(
-            metrics.protocolAssets.protocolCount ||
-              metrics.protocolAssets.total,
-          )}
+          value={formatNumber(protocolAssetDisplayTotal)}
           description="Protocol workspaces"
           icon={DatabaseZap}
-          option={protocolAssetsOption}
-          chartHeight={86}
+          ring={{
+            value: metrics.protocolAssets.protocolCount,
+            max: protocolAssetMax,
+            centerValue: formatNumber(protocolAssetDisplayTotal),
+            label: "Protocol workspace share",
+          }}
           chips={topRecordEntries(metrics.protocolAssets.byScope, 2).map(
             ([label, value]) => ({ label, value, variant: "outline" as const }),
           )}
@@ -1035,8 +1088,12 @@ export function DashboardView(): JSX.Element {
           value={formatNumber(metrics.debugSessions.total)}
           description="Debug sessions"
           icon={Bug}
-          option={debugOption}
-          chartHeight={86}
+          ring={{
+            value: dominantDebugStatus,
+            max: metrics.debugSessions.total,
+            centerValue: formatNumber(metrics.debugSessions.total),
+            label: "Dominant debug status share",
+          }}
           chips={topRecordEntries(metrics.debugSessions.byStatus, 2).map(
             ([label, value]) => ({ label, value, variant: "outline" as const }),
           )}
@@ -1048,7 +1105,7 @@ export function DashboardView(): JSX.Element {
           description="Generated reports"
           icon={FileText}
           option={reportsOption}
-          chartHeight={86}
+          chartHeight="5.375rem"
           chips={topRecordEntries(metrics.reports.byKind, 2).map(
             ([label, value]) => ({ label, value, variant: "outline" as const }),
           )}
@@ -1068,7 +1125,7 @@ export function DashboardView(): JSX.Element {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <EchartsBase option={taskDistributionOption} height={280} />
+            <EchartsBase option={taskDistributionOption} height="17.5rem" />
           </CardContent>
         </Card>
 
@@ -1083,7 +1140,7 @@ export function DashboardView(): JSX.Element {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <EchartsBase option={crashDistributionOption} height={280} />
+            <EchartsBase option={crashDistributionOption} height="17.5rem" />
           </CardContent>
         </Card>
       </div>
@@ -1173,7 +1230,7 @@ export function DashboardView(): JSX.Element {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <EchartsBase option={currentNodeGraphOption} height={320} />
+            <EchartsBase option={currentNodeGraphOption} height="20rem" />
           </CardContent>
         </Card>
       </div>
@@ -1190,7 +1247,7 @@ export function DashboardView(): JSX.Element {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <EchartsBase option={currentNodeJobTrendOption} height={280} />
+            <EchartsBase option={currentNodeJobTrendOption} height="17.5rem" />
           </CardContent>
         </Card>
 

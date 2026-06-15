@@ -47,10 +47,10 @@ export function useEchartsPalette(): string[] {
 
 export function EchartsBase({
   option,
-  height = 320,
+  height = "20rem",
 }: {
   option: EChartsCoreOption;
-  height?: number;
+  height?: number | string;
 }): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<ECharts | null>(null);

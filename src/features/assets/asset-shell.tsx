@@ -25,6 +25,7 @@ interface AssetShellProps {
   onRefresh: () => void | Promise<void>;
   refreshPending?: boolean;
   actions?: ReactNode;
+  className?: string;
 }
 
 export function AssetShell({
@@ -37,11 +38,12 @@ export function AssetShell({
   onRefresh,
   refreshPending = false,
   actions,
+  className,
 }: AssetShellProps): JSX.Element {
   const protocolOptions = Array.from(new Set([protocol, ...protocols].filter(Boolean)));
 
   return (
-    <section className="rounded-[var(--radius-xl)] border border-border bg-card px-3 py-3 shadow-console">
+    <section className={cn("rounded-[var(--radius-xl)] border border-border bg-card px-3 py-3 shadow-console", className)}>
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex shrink-0 items-center gap-3 rounded-[var(--radius-lg)] border border-border bg-background/80 px-3 py-2">
           <div className="min-w-0">
