@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, CircleDot, MoonStar, SunMedium } from "lucide-react";
 import { NodeSwitcherDropdown } from "@/components/common/node-switcher-dropdown";
+import { UserMenu } from "@/components/layout/user-menu";
 import { Button } from "@/components/ui/button";
 import { systemApi } from "@/lib/api/services/system";
 import { useUiStore } from "@/stores/ui-store";
@@ -80,6 +81,8 @@ export function Topbar(): JSX.Element {
               <MoonStar className="size-[1.125rem]" />
             )}
           </Button>
+
+          <UserMenu />
         </div>
       </div>
     </header>

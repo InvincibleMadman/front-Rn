@@ -15,20 +15,26 @@ function enabledFlag(record: Record<string, unknown>, key: string): string | und
 
 function normalizeCapabilities(data: SystemCapabilitiesResponse): SystemCapabilitiesResponse {
   const record = isRecord(data) ? data : {};
+  const offline = asStringArray(record.offline);
+  const jobs = asStringArray(record.jobs);
+  const config = asStringArray(record.config);
+  const debug = asStringArray(record.debug);
+  const debuggerCapabilities = asStringArray(record.debugger);
+  const kbVisualization = asStringArray(record.kb_visualization);
   const backendOffline = [
     enabledFlag(record, "protocol_scoped_storage"),
     enabledFlag(record, "vuldoc_upload"),
     enabledFlag(record, "document_distillation"),
     enabledFlag(record, "knowledge_base"),
-    asStringArray(record.kb_visualization)?.length ? `kb_visualization: ${asStringArray(record.kb_visualization)?.join(", ")}` : undefined,
+    kbVisualization?.length ? `kb_visualization: ${kbVisualization.join(", ")}` : undefined,
   ].filter((item): item is string => Boolean(item));
 
   return {
     ...data,
-    offline: asStringArray(record.offline) ?? backendOffline,
-    jobs: asStringArray(record.jobs) ?? ["create", "stop", "metrics", "history", "artifacts", "logs", "websocket"],
-    config: asStringArray(record.config) ?? ["read", "patch"],
-    debug: asStringArray(record.debug) ?? asStringArray(record.debugger) ?? [],
+    offline: offline ?? backendOffline,
+    jobs: jobs ?? ["create", "stop", "metrics", "history", "artifacts", "logs", "websocket"],
+    config: config ?? ["read", "patch"],
+    debug: debug ?? debuggerCapabilities ?? [],
   };
 }
 

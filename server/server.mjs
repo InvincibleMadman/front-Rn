@@ -37,8 +37,12 @@ const defaultNodeBaseUrl = process.env.FUZZ_WEB_DEFAULT_NODE_BASE_URL || "http:/
 const defaultNodeSecret = process.env.FUZZ_WEB_DEFAULT_NODE_SECRET || process.env.FUZZ_CORE_NODE_SECRET || "change-me-node-secret";
 const httpsRejectUnauthorized = process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0";
 const proxyCacheTtlMs = 5_000;
+const loginProtectionMaxFailures = 5;
+const loginProtectionWindowMs = 10 * 60 * 1000;
+const loginProtectionBlockMs = 10 * 60 * 1000;
 const proxyResponseHeaderNames = ["content-type", "content-disposition", "content-length", "cache-control", "etag", "last-modified"];
 const proxyReadThroughCache = new Map();
+const loginAttemptState = new Map();
 const httpKeepAliveAgent = new http.Agent({
   keepAlive: true,
   maxSockets: 64,
@@ -109,6 +113,23 @@ function isSpaRoute(pathname) {
     !pathname.startsWith("/node-ws") &&
     !isImmutableAssetPath(pathname) &&
     !hasStaticExtension(pathname);
+}
+
+function isProtectedSpaRoute(pathname) {
+  if (hasStaticExtension(pathname)) return false;
+  return [
+    "/dashboard",
+    "/console",
+    "/assets",
+    "/offline",
+    "/jobs",
+    "/vulns",
+    "/debug",
+    "/artifacts",
+    "/reports",
+    "/nodes",
+    "/settings",
+  ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 function setStaticCacheHeaders(replyOrRes, filePathOrPathname) {
@@ -270,6 +291,64 @@ function verifyPassword(password, salt, expectedHash) {
   return expected.length === actual.length && crypto.timingSafeEqual(actual, expected);
 }
 
+function isDefaultBootstrapPassword() {
+  return !process.env.FUZZ_WEB_BOOTSTRAP_PASSWORD;
+}
+
+function isUsingDefaultNodeSecret(secret) {
+  return !process.env.FUZZ_WEB_DEFAULT_NODE_SECRET &&
+    !process.env.FUZZ_CORE_NODE_SECRET &&
+    String(secret || "") === "change-me-node-secret";
+}
+
+function getClientIp(request) {
+  const forwarded = request.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0].trim();
+  }
+  if (Array.isArray(forwarded) && forwarded.length > 0) {
+    return String(forwarded[0]).split(",")[0].trim();
+  }
+  return request.ip || request.socket?.remoteAddress || "unknown";
+}
+
+function loginThrottleKey(username, clientIp) {
+  return `${String(username || "").trim().toLowerCase()}\n${String(clientIp || "").trim().toLowerCase()}`;
+}
+
+function pruneLoginState(entry, now) {
+  if (!entry) return { failures: [], blockedUntil: 0 };
+  const failures = Array.isArray(entry.failures)
+    ? entry.failures.filter((timestamp) => now - timestamp <= loginProtectionWindowMs)
+    : [];
+  const blockedUntil = entry.blockedUntil && entry.blockedUntil > now ? entry.blockedUntil : 0;
+  return { failures, blockedUntil };
+}
+
+function getLoginState(username, clientIp) {
+  const key = loginThrottleKey(username, clientIp);
+  const now = Date.now();
+  const next = pruneLoginState(loginAttemptState.get(key), now);
+  if (next.failures.length > 0 || next.blockedUntil > 0) {
+    loginAttemptState.set(key, next);
+  } else {
+    loginAttemptState.delete(key);
+  }
+  return { key, now, state: next };
+}
+
+function registerLoginFailure(username, clientIp) {
+  const { key, now, state } = getLoginState(username, clientIp);
+  const failures = [...state.failures, now].filter((timestamp) => now - timestamp <= loginProtectionWindowMs);
+  const blockedUntil = failures.length >= loginProtectionMaxFailures ? now + loginProtectionBlockMs : state.blockedUntil;
+  loginAttemptState.set(key, { failures, blockedUntil });
+  return blockedUntil;
+}
+
+function clearLoginFailures(username, clientIp) {
+  loginAttemptState.delete(loginThrottleKey(username, clientIp));
+}
+
 function sanitizeUser(row) {
   if (!row) return null;
   return { user_id: row.user_id, username: row.username, role: row.role };
@@ -363,14 +442,25 @@ app.setErrorHandler((error, request, reply) => {
   });
 });
 
-async function requireWebSession(request, reply) {
-  const token = request.cookies?.icp_fuzz_session;
-  if (!token) return reply.code(401).send({ ok: false, message: "unauthorized", data: null });
+function readSessionUserFromToken(token) {
+  if (!token) return null;
   try {
-    request.user = app.jwt.verify(token);
+    return app.jwt.verify(token);
   } catch {
+    return null;
+  }
+}
+
+function tryReadSessionUserFromRequest(request) {
+  return readSessionUserFromToken(request.cookies?.icp_fuzz_session);
+}
+
+async function requireWebSession(request, reply) {
+  const user = tryReadSessionUserFromRequest(request);
+  if (!user) {
     return reply.code(401).send({ ok: false, message: "unauthorized", data: null });
   }
+  request.user = user;
 }
 
 async function requireAdmin(request, reply) {
@@ -403,6 +493,30 @@ function setSessionCookie(reply, sessionToken) {
 function clearSessionCookie(reply) {
   reply.clearCookie("icp_fuzz_session", { path: "/" });
   reply.clearCookie("icp_fuzz_csrf", { path: "/" });
+}
+
+function issueSession(reply, user) {
+  const sessionToken = app.jwt.sign(user, { expiresIn: "7d" });
+  setSessionCookie(reply, sessionToken);
+}
+
+function sessionSecuritySummary() {
+  return {
+    cookie_name: "icp_fuzz_session",
+    http_only: true,
+    same_site: "lax",
+    secure: isProduction,
+    ttl: "7d",
+  };
+}
+
+function csrfSecuritySummary() {
+  return {
+    cookie_name: "icp_fuzz_csrf",
+    header_name: "X-CSRF-Token",
+    same_site: "lax",
+    secure: isProduction,
+  };
 }
 
 function createCsrfToken() {
@@ -917,13 +1031,29 @@ app.get("/web-api/public/default-node", async () => {
 app.post("/web-api/auth/login", { preHandler: [requireCsrf] }, async (request, reply) => {
   const { username, password } = request.body ?? {};
   if (!username || !password) return reply.code(400).send({ ok: false, message: "username and password required", data: null });
-  const row = db.prepare("SELECT * FROM users WHERE username = ?").get(String(username));
-  if (!row || !verifyPassword(String(password), row.password_salt, row.password_hash)) {
-    return reply.code(401).send({ ok: false, message: "invalid credentials", data: null });
+  const normalizedUsername = String(username).trim();
+  const clientIp = getClientIp(request);
+  const { now, state } = getLoginState(normalizedUsername, clientIp);
+  if (state.blockedUntil > now) {
+    const retryAfter = Math.max(1, Math.ceil((state.blockedUntil - now) / 1000));
+    reply.header("Retry-After", String(retryAfter));
+    return reply.code(429).send({ ok: false, message: "too many login attempts", data: { retry_after_seconds: retryAfter } });
   }
+
+  const row = db.prepare("SELECT * FROM users WHERE username = ?").get(normalizedUsername);
+  if (!row || !verifyPassword(String(password), row.password_salt, row.password_hash)) {
+    const blockedUntil = registerLoginFailure(normalizedUsername, clientIp);
+    if (blockedUntil > now) {
+      const retryAfter = Math.max(1, Math.ceil((blockedUntil - now) / 1000));
+      reply.header("Retry-After", String(retryAfter));
+      return reply.code(429).send({ ok: false, message: "too many login attempts", data: { retry_after_seconds: retryAfter } });
+    }
+    return reply.code(401).send({ ok: false, message: "用户名或密码错误", data: null });
+  }
+
   const user = sanitizeUser(row);
-  const sessionToken = app.jwt.sign(user, { expiresIn: "7d" });
-  setSessionCookie(reply, sessionToken);
+  clearLoginFailures(normalizedUsername, clientIp);
+  issueSession(reply, user);
   audit(user.user_id, "auth.login", "user", user.username);
   return { ok: true, message: "ok", data: { user } };
 });
@@ -935,6 +1065,62 @@ app.post("/web-api/auth/logout", { preHandler: [requireWebSession, requireCsrf] 
 });
 
 app.get("/web-api/auth/me", { preHandler: [requireWebSession] }, async (request) => ({ ok: true, message: "ok", data: { user: request.user } }));
+
+app.post("/web-api/auth/change-password", { preHandler: [requireWebSession, requireCsrf] }, async (request, reply) => {
+  const { current_password, new_password } = request.body ?? {};
+  const currentPassword = String(current_password ?? "");
+  const newPassword = String(new_password ?? "");
+  if (!currentPassword || !newPassword) {
+    return reply.code(400).send({ ok: false, message: "current_password and new_password required", data: null });
+  }
+  if (newPassword.length < 8 || newPassword.length > 128) {
+    return reply.code(400).send({ ok: false, message: "new password must be 8-128 characters", data: null });
+  }
+
+  const row = db.prepare("SELECT * FROM users WHERE user_id = ?").get(request.user.user_id);
+  if (!row || !verifyPassword(currentPassword, row.password_salt, row.password_hash)) {
+    return reply.code(401).send({ ok: false, message: "用户名或密码错误", data: null });
+  }
+
+  const { salt, hash } = hashPassword(newPassword);
+  const updatedAt = nowIso();
+  db.prepare("UPDATE users SET password_hash = ?, password_salt = ?, updated_at = ? WHERE user_id = ?").run(hash, salt, updatedAt, request.user.user_id);
+  const nextUser = sanitizeUser(db.prepare("SELECT * FROM users WHERE user_id = ?").get(request.user.user_id));
+  issueSession(reply, nextUser);
+  audit(request.user.user_id, "auth.change_password", "user", request.user.username);
+  return { ok: true, message: "ok", data: { user: nextUser } };
+});
+
+app.get("/web-api/auth/security-summary", { preHandler: [requireWebSession] }, async () => {
+  bootstrapDefaultNode();
+  const preferredNodeId = normalizeNodeId(defaultNodeId);
+  const node =
+    nodeRowById(preferredNodeId) ??
+    db.prepare("SELECT * FROM nodes WHERE enabled = 1 ORDER BY created_at ASC LIMIT 1").get() ??
+    db.prepare("SELECT * FROM nodes ORDER BY created_at ASC LIMIT 1").get();
+
+  return {
+    ok: true,
+    message: "ok",
+    data: {
+      session: sessionSecuritySummary(),
+      csrf: csrfSecuritySummary(),
+      bootstrap_admin: {
+        username: "admin",
+        password_source: isDefaultBootstrapPassword() ? "default" : "env",
+      },
+      default_node: {
+        node_id: node?.node_id ?? null,
+        using_default_secret: node ? isUsingDefaultNodeSecret(node.node_secret) : false,
+      },
+      login_protection: {
+        max_failures: loginProtectionMaxFailures,
+        window_seconds: Math.floor(loginProtectionWindowMs / 1000),
+        block_seconds: Math.floor(loginProtectionBlockMs / 1000),
+      },
+    },
+  };
+});
 
 app.get("/web-api/csrf", async (_request, reply) => {
   const token = createCsrfToken();
@@ -1474,6 +1660,14 @@ app.get("/node-ws/:nodeId/api/v1/*", async (_request, reply) => {
 
 app.setNotFoundHandler(async (request, reply) => {
   const pathname = new URL(request.url, "http://localhost").pathname;
+  const sessionUser = tryReadSessionUserFromRequest(request);
+  if (request.raw.method === "GET" && pathname === "/login" && sessionUser) {
+    return reply.redirect("/dashboard", 302);
+  }
+  if (request.raw.method === "GET" && isProtectedSpaRoute(pathname) && !sessionUser) {
+    const next = `${pathname}${new URL(request.url, "http://localhost").search}`;
+    return reply.redirect(`/login?next=${encodeURIComponent(next)}`, 302);
+  }
   if (request.raw.method === "GET" && isSpaRoute(pathname)) {
     if (!existsSync(indexHtml)) return reply.code(503).type("text/plain").send("dist/index.html missing; run npm run build first");
     setStaticCacheHeaders(reply.raw, "/index.html");

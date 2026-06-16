@@ -1,5 +1,6 @@
 import { apiClient } from "@/lib/api/client";
 import { useAuthStore, type AuthUser } from "@/stores/auth-store";
+import type { AuthSecuritySummary, ChangePasswordRequest, ChangePasswordResponse } from "@/types/api/auth";
 
 export const authApi = {
   async getCsrfToken(): Promise<string> {
@@ -29,7 +30,31 @@ export const authApi = {
       credentials: "include",
       headers: { "X-CSRF-Token": csrfToken },
     });
+    useAuthStore.getState().setCsrfToken("");
     useAuthStore.getState().setUser(null);
+  },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<AuthUser> {
+    const csrfToken = useAuthStore.getState().csrfToken || await authApi.getCsrfToken();
+    const body: ChangePasswordRequest = {
+      current_password: currentPassword,
+      new_password: newPassword,
+    };
+    const response = await apiClient.requestEnvelope<ChangePasswordResponse>("/web-api/auth/change-password", {
+      method: "POST",
+      credentials: "include",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(body),
+    });
+    useAuthStore.getState().setUser(response.data.user);
+    return response.data.user;
+  },
+
+  async getSecuritySummary(): Promise<AuthSecuritySummary> {
+    const response = await apiClient.requestEnvelope<AuthSecuritySummary>("/web-api/auth/security-summary", {
+      credentials: "include",
+    });
+    return response.data;
   },
 
   async me(): Promise<AuthUser | null> {

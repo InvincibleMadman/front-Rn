@@ -67,8 +67,24 @@ export interface DebuggerConfig {
   allow_network_replay?: boolean;
 }
 
+export interface ControlPlaneSecuritySummary {
+  enabled?: boolean;
+  node_id?: string;
+  issuer?: string;
+  token_expire_seconds?: number;
+  secret_configured?: boolean;
+  using_default_secret?: boolean;
+}
+
+export interface RuntimeSecurityInfo {
+  control_plane_enabled?: boolean;
+  using_default_secret?: boolean;
+  token_expire_seconds?: number;
+}
+
 export interface RuntimeInfo {
   resolved_afl_tools?: Record<string, string | null>;
+  security?: RuntimeSecurityInfo;
 }
 
 export interface AppConfigResponse {
@@ -77,6 +93,7 @@ export interface AppConfigResponse {
   llm?: LlmConfig;
   paths?: PathsConfig;
   debugger?: DebuggerConfig;
+  control_plane?: ControlPlaneSecuritySummary;
   runtime_info?: RuntimeInfo;
   [key: string]: unknown;
 }
@@ -84,7 +101,9 @@ export interface AppConfigResponse {
 export type ConfigPatchRequest = Partial<AppConfigResponse>;
 
 export interface SystemInfoResponse {
+  name?: string;
   version?: string;
+  api_contract?: string;
   system?: string;
   jobs_running?: number;
   jobs_total?: number;
@@ -92,6 +111,8 @@ export interface SystemInfoResponse {
   http?: { host?: string; port?: number };
   server?: { host?: string; port?: number };
   afl?: { configured_binary?: string; search_paths?: string[]; resolved_tools?: Record<string, string | null> };
+  control_plane?: ControlPlaneSecuritySummary;
+  runtime_info?: RuntimeInfo;
   [key: string]: unknown;
 }
 
@@ -106,7 +127,6 @@ export interface SystemCapabilitiesResponse {
   knowledge_base?: boolean;
   kb_visualization?: string[];
   debugger?: string[];
-  legacy_compat?: boolean;
   [key: string]: unknown;
 }
 

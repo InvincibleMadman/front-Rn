@@ -277,10 +277,10 @@ export function JobCreateView(): JSX.Element {
           node_name: optionalText(values.node_name) ?? null,
           risk_enabled: values.risk_enabled,
           notes: optionalText(values.notes) ?? null,
-          compatibility_notice:
+          runner_notice:
             selectedBinary === "afl-fuzz"
-              ? "当前 Runner 原生消费 afl-fuzz 风格命令。"
-              : "当前 Runner 仍按 afl-fuzz 风格组装命令，其他 AFL 工具是否可直接运行取决于后端与宿主机支持。",
+              ? "当前 Runner 原生使用 afl-fuzz 风格命令。"
+              : "当前 Runner 仍按 afl-fuzz 风格组装命令，其他 AFL 工具能否直接运行取决于后端与宿主机支持。",
         },
       };
 
@@ -295,7 +295,7 @@ export function JobCreateView(): JSX.Element {
       <PageHeader
         eyebrow="任务创建"
         title="创建 Fuzz 任务"
-        description="补齐页面侧可配置输入项，但保持 API service 与请求组装边界不变。当前 Runner 已明确消费基础字段与 debug.transport_*，高级兼容字段会随请求附带，是否生效取决于后端支持。"
+        description="补齐页面侧可配置输入项，但保持 API service 与请求组装边界不变。当前 Runner 已明确消费基础字段与 debug.transport_*，高级扩展字段会随请求附带，是否生效取决于后端支持。"
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(19rem,0.9fr)]">
@@ -510,7 +510,7 @@ export function JobCreateView(): JSX.Element {
                 <div className="flex min-w-0 items-center justify-between gap-4 rounded-[var(--radius-lg)] border border-border/60 bg-background/60 px-4 py-3">
                   <div className="min-w-0">
                     <p className="text-sm font-medium">risk_enabled</p>
-                    <p className="text-xs text-muted-foreground">作为兼容字段与元数据发送，供后端未来扩展读取。</p>
+                    <p className="text-xs text-muted-foreground">作为扩展字段与元数据发送，供后端未来扩展读取。</p>
                   </div>
                   <Switch checked={form.watch("risk_enabled")} onCheckedChange={(checked) => form.setValue("risk_enabled", checked)} />
                 </div>
@@ -526,7 +526,7 @@ export function JobCreateView(): JSX.Element {
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <Wrench className="size-4 text-[hsl(var(--accent-orange))]" />
-                    <span className="text-sm font-semibold">高级工具模式与 AFL 兼容字段</span>
+                    <span className="text-sm font-semibold">高级工具模式与 AFL 扩展字段</span>
                   </div>
                   <span className="rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
                     展开
@@ -552,16 +552,16 @@ export function JobCreateView(): JSX.Element {
                     <Input {...form.register("node_name")} placeholder="node-a / lab-02" />
                   </FormField>
 
-                  <FormField label="source_dir" description="兼容扩展字段，适合记录源码路径。">
+                  <FormField label="source_dir" description="扩展字段，适合记录源码路径。">
                     <Input {...form.register("source_dir")} placeholder="/src/project" />
                   </FormField>
 
-                  <FormField label="build_dir" description="兼容扩展字段，适合记录构建产物目录。">
+                  <FormField label="build_dir" description="扩展字段，适合记录构建产物目录。">
                     <Input {...form.register("build_dir")} placeholder="/src/project/build" />
                   </FormField>
 
                   <div className="md:col-span-2">
-                    <FormField label="fuzzer_args" description="按空格分词，作为兼容字段附加到请求。">
+                    <FormField label="fuzzer_args" description="按空格分词，作为附加字段附加到请求。">
                       <Input {...form.register("fuzzer_args_text")} placeholder="-m none -t 1000+ -M master" />
                     </FormField>
                   </div>
