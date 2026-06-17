@@ -5,7 +5,7 @@ import type { OperationLogItem } from "@/types/api/operations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/common/status-badge";
-import { ApiErrorToast } from "@/components/common/api-error-alert";
+import { ApiErrorReporter } from "@/components/common/api-error-alert";
 import { formatDateTime } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
@@ -184,16 +184,7 @@ export function OperationLogPanel({
       </CardHeader>
 
       <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-5 pb-5 pt-0">
-        {error ? (
-          <ApiErrorToast
-            error={error}
-            title="日志读取失败"
-            onRetry={() => {
-              setFailures(0);
-              void fetchLogs();
-            }}
-          />
-        ) : null}
+        <ApiErrorReporter error={error} title="日志读取失败" source="operations" />
 
         <div
           ref={logBoxRef}

@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ApiErrorAlert } from "@/components/common/api-error-alert";
+import { ApiErrorReporter } from "@/components/common/api-error-alert";
 import type { JobCreateRequest } from "@/types/api/jobs";
 import type { LaunchProfile, TargetCandidate } from "@/types/api/build-assistant";
 
@@ -292,6 +292,9 @@ export function JobCreateView(): JSX.Element {
 
   return (
     <div className="space-y-5">
+      <ApiErrorReporter error={formError} title="创建任务失败" source="jobs" />
+      <ApiErrorReporter error={launchProfilesQuery.error} title="加载 LaunchProfile 失败" source="jobs" />
+      <ApiErrorReporter error={buildTargetsQuery.error} title="加载 Build targets 失败" source="jobs" />
       <PageHeader
         eyebrow="任务创建"
         title="创建 Fuzz 任务"
@@ -343,7 +346,13 @@ export function JobCreateView(): JSX.Element {
                             <p className="mt-1 break-all text-xs text-muted-foreground">{item.binary_ref}</p>
                           </div>
                         ))}
-                        {(buildTargetsQuery.data ?? []).length === 0 ? <p className="text-xs text-muted-foreground">当前协议暂无 BuildRun targets。</p> : null}
+                        {(buildTargetsQuery.data ?? []).length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            {buildTargetsQuery.error
+                              ? "Build targets 暂不可用，详细错误已转入全局弹窗与日志栏。"
+                              : "当前协议暂无 BuildRun targets。"}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -616,8 +625,6 @@ export function JobCreateView(): JSX.Element {
                   </div>
                 </div>
               </details>
-
-              {formError ? <ApiErrorAlert error={formError} title="创建任务失败" /> : null}
 
               <div className="flex flex-wrap items-center gap-3">
                 <Button type="submit" disabled={createJobMutation.isPending}>

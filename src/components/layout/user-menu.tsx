@@ -98,12 +98,12 @@ export function UserMenu(): JSX.Element | null {
         <div
           role="menu"
           aria-label="用户菜单"
-          className="absolute right-0 top-[calc(100%+0.5rem)] z-[90] w-[min(15rem,calc(100vw-2rem))] rounded-[var(--radius-xl)] border border-border bg-popover p-2 shadow-console"
+          className="absolute right-0 top-[calc(100%+0.5rem)] z-[90] inline-flex min-w-[10.5rem] max-w-[calc(100vw-2rem)] flex-col rounded-[var(--radius-xl)] border border-border bg-popover p-2 shadow-console"
         >
           <button
             type="button"
             role="menuitem"
-            className="flex w-full items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-secondary"
+            className="flex items-center gap-3 whitespace-nowrap rounded-[var(--radius-md)] px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-secondary"
             onClick={handleAccountClick}
           >
             <UserCircle2 className="size-4 text-primary" />
@@ -113,7 +113,7 @@ export function UserMenu(): JSX.Element | null {
           <button
             type="button"
             role="menuitem"
-            className="flex w-full items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex items-center gap-3 whitespace-nowrap rounded-[var(--radius-md)] px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-70"
             onClick={() => {
               void handleLogoutClick();
             }}

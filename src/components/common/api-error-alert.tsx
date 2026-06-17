@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Copy, RefreshCw, X } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
+import { AlertTriangle, Copy, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { JsonViewer } from "@/components/common/json-viewer";
@@ -115,50 +115,6 @@ export function ApiErrorAlert({
         ) : null}
       </CardContent>
     </Card>
-  );
-}
-
-export function ApiErrorToast({
-  error,
-  title = "Request failed",
-  durationMs = 6_000,
-  onRetry,
-}: {
-  error?: ApiErrorPayload | unknown;
-  title?: string;
-  durationMs?: number;
-  onRetry?: () => void;
-}): JSX.Element | null {
-  const [visible, setVisible] = useState(Boolean(error));
-
-  useEffect(() => {
-    if (!error) {
-      setVisible(false);
-      return;
-    }
-
-    setVisible(true);
-    if (durationMs <= 0) return;
-
-    const timer = window.setTimeout(() => setVisible(false), durationMs);
-    return () => window.clearTimeout(timer);
-  }, [durationMs, error]);
-
-  if (!error || !visible) return null;
-
-  const payload = normalizeApiError(error, title);
-
-  return (
-    <div className="pointer-events-none fixed right-4 top-20 z-[90] w-[min(560px,calc(100vw-2rem))]">
-      <div className="pointer-events-auto overflow-hidden rounded-[var(--radius-xl)] shadow-2xl shadow-danger/20">
-        <div className="flex justify-end border-x border-t border-danger/30 bg-danger/10 px-2 pt-2">
-          <Button type="button" size="icon" variant="ghost" className="size-7" onClick={() => setVisible(false)}>
-            <X className="size-4" />
-          </Button>
-        </div>
-        <ApiErrorAlert error={payload} title={title} compact onRetry={onRetry} reportToGlobal={false} />
-      </div>
-    </div>
   );
 }
 

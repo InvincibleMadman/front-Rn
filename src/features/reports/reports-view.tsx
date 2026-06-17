@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/common/form-field";
 import { SummaryCard } from "@/components/common/summary-card";
 import { JsonViewer } from "@/components/common/json-viewer";
-import { ApiErrorAlert } from "@/components/common/api-error-alert";
+import { ApiErrorReporter } from "@/components/common/api-error-alert";
 import { reportsApi } from "@/lib/api/services/reports";
 import { protocolsApi } from "@/lib/api/services/protocols";
 import { formatDateTime, formatNumber } from "@/lib/utils/format";
@@ -57,13 +57,15 @@ export function ReportsView(): JSX.Element {
 
   return (
     <div className="space-y-5">
+      <ApiErrorReporter error={protocolsQuery.error} title="加载协议列表失败" source="reports" />
+      <ApiErrorReporter error={summaryQuery.error} title="加载报告摘要失败" source="reports" />
+      <ApiErrorReporter error={listQuery.error} title="加载历史报告失败" source="reports" />
+      <ApiErrorReporter error={generateMutation.error} title="生成报告失败" source="reports" />
       <PageHeader
         eyebrow="报 告 中 心"
         title="报告中心"
         description="按协议生成 PDF，汇总资产、KB、风险分析、Fuzz、Crash、GDB 与漏洞中心记录。"
       />
-
-      {generateMutation.error ? <ApiErrorAlert error={generateMutation.error} title="生成报告失败" /> : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard title="历史报告" value={String(summaryQuery.data?.reports_count ?? 0)} hint="reports/" statusColor="blue" />
@@ -124,7 +126,7 @@ export function ReportsView(): JSX.Element {
         <CardContent className="space-y-3">
           {(listQuery.data ?? []).length === 0 ? (
             <div className="rounded-[var(--radius-lg)] border border-dashed border-border/70 bg-background/50 px-4 py-10 text-center text-sm text-muted-foreground">
-              暂无历史报告。
+              {listQuery.error ? "历史报告暂不可用，详细错误已转入全局弹窗与日志栏。" : "暂无历史报告。"}
             </div>
           ) : (
             (listQuery.data ?? []).map((item) => (

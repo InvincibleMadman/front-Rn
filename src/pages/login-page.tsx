@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/common/form-field";
-import { ApiErrorAlert } from "@/components/common/api-error-alert";
+import { ApiErrorReporter } from "@/components/common/api-error-alert";
 import { cn } from "@/lib/utils/cn";
 import { authApi } from "@/lib/api/services/auth";
 
@@ -68,6 +68,8 @@ export function LoginPage(): JSX.Element {
         ].join(", "),
       }}
     >
+      <ApiErrorReporter error={loginMutation.error} title="登录失败" source="auth" />
+
       <div
         className="pointer-events-none absolute inset-0 opacity-60"
         style={{
@@ -116,17 +118,15 @@ export function LoginPage(): JSX.Element {
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
-                {capabilityCards.map((item, index) => {
+              <div className="grid gap-4 md:auto-rows-fr md:grid-cols-3">
+                {capabilityCards.map((item) => {
                   const Icon = item.icon;
 
                   return (
                     <div
                       key={item.title}
                       className={cn(
-                        "relative overflow-hidden rounded-[1.4rem] border border-border/70 bg-background/58 p-4 shadow-console backdrop-blur-xl transition-colors",
-                        index === 1 && "md:translate-y-6",
-                        index === 2 && "lg:translate-y-10",
+                        "relative h-full overflow-hidden rounded-[1.4rem] border border-border/70 bg-background/58 p-4 shadow-console backdrop-blur-xl transition-colors",
                       )}
                     >
                       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,hsl(var(--accent-blue)/0.12),transparent_35%)]" />
@@ -160,8 +160,6 @@ export function LoginPage(): JSX.Element {
               </CardHeader>
 
               <CardContent className="relative space-y-5">
-                {loginMutation.error ? <ApiErrorAlert error={loginMutation.error} title="登录失败" compact /> : null}
-
                 <form
                   className="space-y-4"
                   onSubmit={(event) => {

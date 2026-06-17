@@ -30,7 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { JsonViewer } from "@/components/common/json-viewer";
 import { RiskAnalysisSummary } from "@/components/common/risk-analysis-summary";
 import { InstrumentationReportView } from "@/components/common/instrumentation-report-view";
-import { ApiErrorReporter, ApiErrorToast } from "@/components/common/api-error-alert";
+import { ApiErrorReporter } from "@/components/common/api-error-alert";
 import { SummaryCard } from "@/components/common/summary-card";
 import { DonutChart } from "@/components/charts/donut-chart";
 import { BarChart } from "@/components/charts/bar-chart";
@@ -1241,7 +1241,6 @@ export function OfflineStudioView(): JSX.Element {
               </CardContent>
             </Card>
             <div className="min-h-[400px] flex-1">
-              <ApiErrorToast error={protocolMutation.error} title="协议提取失败" />
               <Card className="flex h-full min-h-0 flex-col overflow-hidden">
                 <CardHeader className="shrink-0">
                   <CardTitle>协议提取结果</CardTitle>
@@ -1392,7 +1391,6 @@ export function OfflineStudioView(): JSX.Element {
               </CardContent>
             </Card>
             <div className="min-h-[400px] flex-1">
-              <ApiErrorToast error={seedsMutation.error} title="种子生成失败" />
               <Card className="flex h-full min-h-0 flex-col overflow-hidden">
                 <CardHeader className="shrink-0">
                   <CardTitle>种子生成结果</CardTitle>
@@ -1502,7 +1500,6 @@ export function OfflineStudioView(): JSX.Element {
               </CardContent>
             </Card>
             <div className="grid min-h-[400px] min-w-0 grid-rows-[minmax(0,1fr)_200px] gap-4">
-              <ApiErrorToast error={riskAnalyzeMutation.error} title="风险路径分析失败" />
 
               <Card className="flex min-h-0 flex-col overflow-hidden">
                 <CardHeader className="shrink-0">
@@ -1748,7 +1745,6 @@ export function OfflineStudioView(): JSX.Element {
                       }}
                     />
                   </FormField>
-                  <ApiErrorToast error={uploadError} title="风险 JSON 上传失败" />
                   <div className="rounded-xl border border-border/60 bg-background/50 p-4 text-sm text-muted-foreground">
                     上传后的风险结果会被保存到兼容目录，并镜像为默认风险结果文件名。
                   </div>

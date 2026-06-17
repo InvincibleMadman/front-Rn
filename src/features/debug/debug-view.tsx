@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { FormField } from "@/components/common/form-field";
-import { ApiErrorReporter, ApiErrorToast } from "@/components/common/api-error-alert";
+import { ApiErrorReporter } from "@/components/common/api-error-alert";
 import { JsonViewer } from "@/components/common/json-viewer";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SummaryCard } from "@/components/common/summary-card";
@@ -355,11 +355,6 @@ export function DebugView(): JSX.Element {
       <ApiErrorReporter error={candidatesQuery.error} title="加载 crash seed 失败" source="debug" />
       <ApiErrorReporter error={sessionQueryMutation.error} title="读取调试会话失败" source="debug" />
       <ApiErrorReporter error={historyQuery.error} title="加载历史调试会话失败" source="debug" />
-      <ApiErrorToast error={createMutation.error} title="启动 GDB 调试失败" />
-      <ApiErrorToast error={candidatesQuery.error} title="加载 crash seed 失败" />
-      <ApiErrorToast error={sessionQueryMutation.error} title="读取调试会话失败" />
-      <ApiErrorToast error={historyQuery.error} title="加载历史调试会话失败" />
-
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard title="调试会话" value={String(debugSummaryQuery.data?.total ?? 0)} hint="debug/summary" statusColor="blue" />
         <SummaryCard title="最近会话" value={String(debugSummaryQuery.data?.recent_sessions?.length ?? 0)} hint="recent sessions" statusColor="teal" />

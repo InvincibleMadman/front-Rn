@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ApiErrorReporter, ApiErrorToast } from "@/components/common/api-error-alert";
+import { ApiErrorReporter } from "@/components/common/api-error-alert";
 import { JsonViewer } from "@/components/common/json-viewer";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SummaryCard } from "@/components/common/summary-card";
@@ -157,9 +157,6 @@ export function VulnHistoryView(): JSX.Element {
       <ApiErrorReporter error={protocolsQuery.error} title="协议列表加载失败" source="offline" />
       <ApiErrorReporter error={historyQuery.error} title="漏洞历史加载失败" source="offline" />
       <ApiErrorReporter error={detailQuery.error} title="漏洞详情加载失败" source="offline" />
-      <ApiErrorToast error={historyQuery.error} title="漏洞历史加载失败" />
-      <ApiErrorToast error={detailQuery.error} title="漏洞详情加载失败" />
-
       <PageHeader
         eyebrow="漏洞中心"
         title="漏洞中心"

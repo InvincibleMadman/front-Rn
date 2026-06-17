@@ -5,7 +5,7 @@ import { nodesApi } from "@/lib/api/services/nodes";
 import { useUiStore } from "@/stores/ui-store";
 import type { ApiNode, NodePingResult } from "@/types/api/nodes";
 import { Button } from "@/components/ui/button";
-import { ApiErrorAlert } from "@/components/common/api-error-alert";
+import { ApiErrorReporter } from "@/components/common/api-error-alert";
 import { cn } from "@/lib/utils/cn";
 
 const PING_FLOATING_CARD_AUTO_CLOSE_MS = 8_000;
@@ -113,6 +113,8 @@ export function NodeSwitcherDropdown(): JSX.Element {
 
   return (
     <div ref={rootRef} className="relative flex w-full min-w-0 items-center gap-3">
+      <ApiErrorReporter error={nodesQuery.error} title="加载节点列表失败" source="node-switcher" />
+      <ApiErrorReporter error={pingError} title="节点 Ping 失败" source="node-switcher" />
       <button
         type="button"
         onClick={handleTriggerClick}
@@ -157,7 +159,9 @@ export function NodeSwitcherDropdown(): JSX.Element {
 
           {!nodesQuery.isLoading && nodes.length === 0 ? (
             <div className="rounded-[var(--radius-md)] px-3 py-3 text-sm text-muted-foreground">
-              暂无节点，请进入“后端节点管理”页面添加。
+              {nodesQuery.error
+                ? "节点列表暂不可用，详细错误已转入全局弹窗与日志栏。"
+                : "暂无节点，请进入“后端节点管理”页面添加。"}
             </div>
           ) : null}
 
@@ -228,29 +232,6 @@ export function NodeSwitcherDropdown(): JSX.Element {
                 "fuzz-server",
             )}
           </div>
-        </div>
-      ) : null}
-
-      {pingError ? (
-        <div className="absolute right-0 top-[calc(100%+0.5rem)] z-[95] w-[min(32rem,calc(100vw-2rem))] rounded-xl border border-danger/25 bg-card p-3 pt-8 shadow-console">
-          <button
-            type="button"
-            onClick={clearPingFloatingCard}
-            className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            title="关闭"
-          >
-            <X className="size-3.5" />
-          </button>
-
-          <ApiErrorAlert
-            error={pingError}
-            title="节点 Ping 失败"
-            compact
-            onRetry={() => {
-              clearPingFloatingCard();
-              if (selected) pingMutation.mutate(selected);
-            }}
-          />
         </div>
       ) : null}
     </div>

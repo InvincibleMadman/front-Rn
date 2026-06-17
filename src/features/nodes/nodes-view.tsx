@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/common/form-field";
-import { ApiErrorAlert } from "@/components/common/api-error-alert";
+import { ApiErrorReporter } from "@/components/common/api-error-alert";
 import { JsonViewer } from "@/components/common/json-viewer";
 import { StatusBadge } from "@/components/common/status-badge";
 import { nodesApi } from "@/lib/api/services/nodes";
@@ -26,6 +26,7 @@ export function NodesView(): JSX.Element {
   const [nodeSecret, setNodeSecret] = useState("");
   const [pingResults, setPingResults] = useState<Record<string, NodePingResult>>({});
   const [pingError, setPingError] = useState<unknown>();
+  const [lastPingTarget, setLastPingTarget] = useState<ApiNode | null>(null);
 
   const nodesQuery = useQuery({ queryKey: ["api-nodes", "management"], queryFn: nodesApi.loadAllNodes });
   const nodes = nodesQuery.data?.nodes ?? [];
@@ -35,7 +36,7 @@ export function NodesView(): JSX.Element {
   const pingMutation = useMutation({
     mutationFn: nodesApi.pingNode,
     onSuccess: (result) => {
-      if (editing.id) setPingResults((current) => ({ ...current, [editing.id]: result }));
+      if (lastPingTarget?.id) setPingResults((current) => ({ ...current, [lastPingTarget.id]: result }));
       setPingError(undefined);
     },
     onError: setPingError,
@@ -84,6 +85,11 @@ export function NodesView(): JSX.Element {
     return node.createdBy === currentUser?.user_id;
   };
 
+  const pingNode = (node: ApiNode): void => {
+    setLastPingTarget(node);
+    pingMutation.mutate(node);
+  };
+
   const renderNode = (node: ApiNode): JSX.Element => (
     <div key={node.id} className="rounded-xl border border-border/60 bg-background/50 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -98,7 +104,7 @@ export function NodesView(): JSX.Element {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => nodesApi.selectNode(node)}>设为当前</Button>
-          <Button size="sm" variant="outline" onClick={() => pingMutation.mutate(node)}>Ping</Button>
+          <Button size="sm" variant="outline" onClick={() => pingNode(node)}>Ping</Button>
           {canEditNode(node) ? <Button size="sm" variant="outline" onClick={() => { setEditing(node); setNodeSecret(""); }}>编辑</Button> : null}
           {isAdmin ? <Button size="sm" variant="danger" onClick={() => removeMutation.mutate(node.id)}><Trash2 className="size-3.5" />删除</Button> : null}
         </div>
@@ -114,21 +120,33 @@ export function NodesView(): JSX.Element {
 
   return (
     <div className="space-y-6">
+      <ApiErrorReporter error={nodesQuery.error} title="加载节点列表失败" source="nodes" />
+      <ApiErrorReporter error={pingError} title="节点 Ping 失败" source="nodes" />
+      <ApiErrorReporter error={saveMutation.error} title="节点保存失败" source="nodes" />
+      <ApiErrorReporter error={removeMutation.error} title="节点删除失败" source="nodes" />
       <PageHeader eyebrow="Backend Nodes" title="后端节点管理" description="节点统一保存于 Web BFF。普通用户可新增并修改自己创建的节点，删除节点仅管理员可用。" />
-
-      {pingError ? <ApiErrorAlert error={pingError} title="节点 Ping 失败" onRetry={() => editing.baseUrl && pingMutation.mutate(editing)} /> : null}
-      {saveMutation.error ? <ApiErrorAlert error={saveMutation.error} title="节点保存失败" /> : null}
-      {removeMutation.error ? <ApiErrorAlert error={removeMutation.error} title="节点删除失败" /> : null}
 
       <div className="grid gap-4 xl:grid-cols-[1fr_0.85fr]">
         <div className="space-y-4">
           <Card>
             <CardHeader><CardTitle>我创建的节点</CardTitle><CardDescription>可选择、Ping，并在权限允许时编辑。</CardDescription></CardHeader>
-            <CardContent className="space-y-3">{mine.length ? mine.map(renderNode) : <p className="text-sm text-muted-foreground">暂无节点。</p>}</CardContent>
+            <CardContent className="space-y-3">
+              {mine.length ? mine.map(renderNode) : (
+                <p className="text-sm text-muted-foreground">
+                  {nodesQuery.error ? "节点列表暂不可用，详细错误已转入全局弹窗与日志栏。" : "暂无节点。"}
+                </p>
+              )}
+            </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>其他节点</CardTitle><CardDescription>管理员可管理所有节点；普通用户只能查看和切换。</CardDescription></CardHeader>
-            <CardContent className="space-y-3">{others.length ? others.map(renderNode) : <p className="text-sm text-muted-foreground">暂无其他节点。</p>}</CardContent>
+            <CardContent className="space-y-3">
+              {others.length ? others.map(renderNode) : (
+                <p className="text-sm text-muted-foreground">
+                  {nodesQuery.error ? "节点列表暂不可用，详细错误已转入全局弹窗与日志栏。" : "暂无其他节点。"}
+                </p>
+              )}
+            </CardContent>
           </Card>
         </div>
 
@@ -143,7 +161,7 @@ export function NodesView(): JSX.Element {
             <div className="flex gap-2">
               <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}><Save className="size-4" />保存节点</Button>
               <Button variant="secondary" onClick={() => { setEditing(emptyNode()); setNodeSecret(""); }}><X className="size-4" />清空表单</Button>
-              <Button variant="outline" disabled={!editing.baseUrl} onClick={() => pingMutation.mutate(editing)}>Ping 表单节点</Button>
+              <Button variant="outline" disabled={!editing.baseUrl} onClick={() => pingNode(editing)}>Ping 表单节点</Button>
             </div>
             <div className="rounded-xl border border-border/60 bg-background/50 p-3 text-sm text-muted-foreground">正式访问将由 Web BFF 代理到节点。浏览器侧只切换 selectedNodeId，不再直接切后端 URL。</div>
           </CardContent>

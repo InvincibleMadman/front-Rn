@@ -19,7 +19,7 @@ import { useWebSocketStream } from "@/hooks/use-websocket-stream";
 import { useUiStore } from "@/stores/ui-store";
 import { translateArtifactKind, translateJobStatus } from "@/lib/utils/display";
 import { dockLog } from "@/components/layout/dock";
-import { ApiErrorReporter, ApiErrorToast } from "@/components/common/api-error-alert";
+import { ApiErrorReporter } from "@/components/common/api-error-alert";
 
 function metricTime(item: Metrics): string {
   return item.timestamp ?? new Date().toISOString();
@@ -256,9 +256,6 @@ export function JobDetailView(): JSX.Element {
       <ApiErrorReporter error={artifactsQuery.error} title="任务产物加载失败" source="job" />
       <ApiErrorReporter error={replayMutation.error} title="产物回放失败" source="job" />
       <ApiErrorReporter error={analyzeMutation.error} title="产物分析失败" source="job" />
-      <ApiErrorToast error={replayMutation.error} title="产物回放失败" />
-      <ApiErrorToast error={analyzeMutation.error} title="产物分析失败" />
-
       <PageHeader
         eyebrow="任务详情"
         title={jobName(job)}
