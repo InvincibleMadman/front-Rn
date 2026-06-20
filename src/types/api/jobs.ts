@@ -21,6 +21,12 @@ export interface JobCreateRequest {
   fuzzer_args?: string[];
   env?: Record<string, string>;
   timeout_sec?: number;
+  memory_limit_mb?: number;
+  workers?: number;
+  scheduler?: string;
+  risk_enabled?: boolean;
+  node_name?: string;
+  notes?: string;
   dry_run?: boolean;
   debug?: JobDebugConfig;
   [key: string]: unknown;
@@ -88,12 +94,6 @@ export interface AnalysisResult {
   [key: string]: unknown;
 }
 
-/**
- * 后端 JobRecord：
- * { job_id, protocol, status, pid, request: {...}, output_dir, log_path, command, validation, metrics, created_at, updated_at, ... }
- *
- * 前端 normalizeJob 从 request.* fallback 提取 target_cmd, cwd, afl_path, input_dir, output_dir 等。
- */
 export interface Job {
   job_id: string;
   name?: string;
@@ -129,37 +129,148 @@ export interface Job {
   [key: string]: unknown;
 }
 
-/**
- * 后端 WebSocket events 消息格式：
- * { type: "events", job_id, status, job, log_tail }
- *
- * 前端需要适配这个结构，不再是 { event_type, timestamp, payload }。
- */
 export interface EventMessage {
-  /** 后端字段：消息类型 "events" / "metrics" / "artifacts" */
   type?: string;
-  /** 前端兼容：旧字段名 */
   event_type?: string;
   job_id?: string;
-  /** 后端字段：job status */
   status?: string;
-  /** 后端字段：完整 job 对象 */
   job?: Record<string, unknown>;
-  /** 后端字段：最近日志行 */
   log_tail?: string[];
-  /** 前端兼容：旧字段 */
   timestamp?: string;
   payload?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
-/**
- * 后端 logs/tail 返回格式：
- * { lines: string[], status: string, next_seq: number }
- */
 export interface LogsTailResponse {
   lines: string[];
   status?: string;
   next_seq?: number;
   [key: string]: unknown;
+}
+
+export interface JobsListQuery {
+  status?: string;
+  protocol?: string;
+  node_name?: string;
+  scheduler?: string;
+  risk_enabled?: boolean;
+  keyword?: string;
+  has_crash?: boolean;
+  has_hang?: boolean;
+  limit?: number;
+  offset?: number;
+  sort?: string;
+  order?: "asc" | "desc";
+}
+
+export interface JobsSummary {
+  total: number;
+  running: number;
+  starting: number;
+  stopping: number;
+  finished: number;
+  failed: number;
+  by_status: Record<string, number>;
+  by_protocol: Record<string, number>;
+  by_node: Record<string, number>;
+  by_scheduler: Record<string, number>;
+  recent_jobs: Job[];
+  crash_count: number;
+  hang_count: number;
+  risk_enabled_count: number;
+  risk_enabled_ratio: number;
+  active_protocols: string[];
+  active_nodes: string[];
+  latest_updated_at?: string | null;
+}
+
+export interface JobRuntimeSummary {
+  job_id?: string;
+  protocol?: string;
+  status?: string;
+  working_directory?: string | null;
+  afl_binary?: string | null;
+  input_dir?: string | null;
+  output_dir?: string | null;
+  memory_limit?: string | number | null;
+  timeout?: string | number | null;
+  schedule_mode?: string | null;
+  workers?: number;
+  scheduler?: string;
+  risk_enabled?: boolean;
+  node_name?: string;
+  timeout_sec?: number | null;
+  transport_type?: string | null;
+  transport_config?: Record<string, unknown>;
+  env_count?: number;
+  notes?: string | null;
+  command?: string[];
+  afl_flags?: Array<{ flag: string; value: unknown }>;
+  target_command?: string[];
+  target_binary?: string | null;
+  target_args?: string[];
+  fuzzer_args?: string[];
+}
+
+export interface JobsMonitorItem {
+  job_id: string;
+  status?: string;
+  protocol?: string;
+  node_name?: string;
+  scheduler?: string;
+  risk_enabled?: boolean;
+  updated_at?: string;
+  execs_done?: number;
+  bitmap_cvg?: number;
+  unique_crashes?: number;
+  unique_hangs?: number;
+}
+
+export interface JobsArtifactFeedItem {
+  job_id: string;
+  protocol?: string;
+  artifact_id?: string;
+  kind?: string;
+  discovered_at?: string;
+  seed_path?: string;
+}
+
+export interface JobsAlertItem {
+  job_id?: string;
+  protocol?: string;
+  level?: string;
+  kind?: string;
+  message?: string;
+  at?: string;
+}
+
+export interface JobsTrendPoint {
+  timestamp: string;
+  execs_done: number;
+  bitmap_cvg: number;
+  unique_crashes: number;
+  unique_hangs: number;
+}
+
+export interface JobsMonitorOverview {
+  summary: JobsSummary;
+  trend: JobsTrendPoint[];
+  status_channels: {
+    jobs_by_status: Record<string, number>;
+    artifacts_by_kind: Record<string, number>;
+    top_protocol?: string | null;
+    top_node?: string | null;
+    recent_events: Array<{ job_id?: string; protocol?: string; status?: string; label?: string; updated_at?: string }>;
+  };
+  recent_task_activity: JobsMonitorItem[];
+  recent_artifacts: JobsArtifactFeedItem[];
+  alert_timeline: JobsAlertItem[];
+  selected_job_runtime?: JobRuntimeSummary | null;
+  selected_job_metrics?: Metrics | null;
+}
+
+export interface JobRuntimeResponse {
+  runtime: JobRuntimeSummary;
+  metrics: Metrics | null;
+  artifact_counts: Record<string, number>;
 }

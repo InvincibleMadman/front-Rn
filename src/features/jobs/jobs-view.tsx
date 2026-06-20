@@ -1,414 +1,734 @@
-import { useDeferredValue, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
-import { ActivitySquare, Search, SlidersHorizontal } from "lucide-react";
-import { PageHeader } from "@/components/layout/page-header";
-import { jobsApi } from "@/lib/api/services/jobs";
-import { assetsApi } from "@/lib/api/services/assets";
-import type { AssetListItem } from "@/types/api/assets";
-import type { Job, JobStatus } from "@/types/api/jobs";
-import { formatDateTime } from "@/lib/utils/format";
-import { StatusBadge } from "@/components/common/status-badge";
-import { SummaryCard } from "@/components/common/summary-card";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Boxes, GitBranchPlus, Hammer, RefreshCw, TerminalSquare, Wand2, Wrench } from "lucide-react";
+import { PageHeroBoard } from "@/components/layout/page-hero-board";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { translateJobStatus } from "@/lib/utils/display";
-import { JobCreateView } from "@/features/jobs/job-create-view";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { ApiErrorReporter } from "@/components/common/api-error-alert";
+import { buildAssistantApi } from "@/lib/api/services/build-assistant";
+import { jobsApi } from "@/lib/api/services/jobs";
+import { protocolsApi } from "@/lib/api/services/protocols";
+import { dockLog } from "@/components/layout/dock";
+import type { JobCreateRequest, JobsListQuery, Metrics } from "@/types/api/jobs";
+import type { BuildPlan, BuildProbe, BuildSuggestion, LaunchProfile, RuntimeToolDefinition, SanitizerModeDefinition, TargetCandidate } from "@/types/api/build-assistant";
+import { JobsStatusBoard } from "@/features/jobs/components/jobs-status-board";
+import { JobsFlowTabs, type JobsFlowTabKey } from "@/features/jobs/components/jobs-flow-tabs";
+import { JobsQueryBar } from "@/features/jobs/components/jobs-query-bar";
+import { JobRowList } from "@/features/jobs/components/job-row-list";
+import { JobsResultSummaryPanel } from "@/features/jobs/components/jobs-result-summary-panel";
+import { JobLaunchPreviewPanel } from "@/features/jobs/components/job-launch-preview-panel";
+import { JobsMonitoringOverview } from "@/features/jobs/components/jobs-monitoring-overview";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+function parseCommand(input: string): string[] {
+  return input
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
-function reqStr(job: Job, key: string): string | undefined {
-  const request = isRecord(job.request) ? job.request : {};
-  const value = request[key];
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+function parseKeyValues(text: string): Record<string, string> {
+  try {
+    if (!text.trim()) return {};
+    return JSON.parse(text) as Record<string, string>;
+  } catch {
+    return {};
+  }
 }
 
-function reqBool(job: Job, key: string): boolean | undefined {
-  const request = isRecord(job.request) ? job.request : {};
-  const value = request[key];
-  return typeof value === "boolean" ? value : undefined;
+function joinEnvPreview(env?: Record<string, string>): string {
+  const pairs = Object.entries(env ?? {});
+  return pairs.length ? pairs.map(([key, value]) => `${key}=${value}`).join(" ") : "";
 }
 
-function reqArray(job: Job, key: string): string[] | undefined {
-  const request = isRecord(job.request) ? job.request : {};
-  const value = request[key];
-  return Array.isArray(value) ? value.map(String) : undefined;
+function uniqueBuildSystems(probe?: BuildProbe): string[] {
+  const values = new Set<string>();
+  if (probe?.preferred_build_system) values.add(probe.preferred_build_system);
+  (probe?.build_suggestions ?? []).forEach((item) => values.add(item.build_system));
+  return Array.from(values).filter(Boolean);
 }
 
-function metadata(job: Job): Record<string, unknown> {
-  return isRecord(job.metadata) ? job.metadata : {};
+function estimateToolCommand(options: {
+  tool?: RuntimeToolDefinition | null;
+  targetBinary?: string;
+  targetArgs: string[];
+  inputDir?: string;
+  outputDir?: string;
+  singleInput?: string;
+  scheduler?: string;
+  timeoutSec?: string;
+  memoryLimitMb?: string;
+  fuzzerArgs: string[];
+}): string[] {
+  const { tool, targetBinary, targetArgs, inputDir, outputDir, singleInput, scheduler, timeoutSec, memoryLimitMb, fuzzerArgs } = options;
+  const toolId = tool?.tool_id ?? "afl-fuzz";
+  const targetCmd = [targetBinary || "<target>", ...(targetArgs.length ? targetArgs : ["@@"])];
+
+  if (toolId === "afl-fuzz") {
+    const args = ["-i", inputDir || "<input-dir>", "-o", outputDir || "<output-dir>", "-m", memoryLimitMb || "none"];
+    if (timeoutSec?.trim()) args.push("-t", timeoutSec.trim());
+    if (scheduler && scheduler !== "auto") args.push("-p", scheduler);
+    args.push(...fuzzerArgs);
+    return [toolId, ...args, "--", ...targetCmd];
+  }
+  if (toolId === "afl-cmin") {
+    return [toolId, "-i", inputDir || "<input-dir>", "-o", outputDir || "<output-dir>", ...fuzzerArgs, "--", ...targetCmd];
+  }
+  if (toolId === "afl-showmap") {
+    return [toolId, "-o", outputDir || "showmap.out", ...fuzzerArgs, "--", ...targetCmd];
+  }
+  if (toolId === "afl-tmin") {
+    return [toolId, "-i", singleInput || "<testcase>", "-o", outputDir || "tmin.out", ...fuzzerArgs, "--", ...targetCmd];
+  }
+  if (toolId === "afl-analyze") {
+    return [toolId, ...fuzzerArgs, singleInput || "<testcase>"];
+  }
+  return [toolId, ...fuzzerArgs, "--", ...targetCmd];
 }
 
-function jobName(job: Job): string {
-  return job.name ?? reqStr(job, "name") ?? job.job_id;
-}
+const schedulerOptions = ["auto", "fast", "explore", "linucb", "rare", "mmopt", "seek"];
+const transportOptions = ["stdin", "file", "udp", "tcp", "custom"];
+const buildTypeOptions = ["RelWithDebInfo", "Debug", "Release", "MinSizeRel"];
+const executionModeOptions = [
+  { value: "runtime", label: "实时 Fuzz 任务" },
+  { value: "aux", label: "AFL 辅助工具" },
+  { value: "build", label: "编译 / 构建辅助" },
+] as const;
 
-function jobTarget(job: Job): string {
-  if (job.target_cmd?.length) return job.target_cmd.join(" ");
-  const requestCmd = reqArray(job, "target_cmd");
-  if (requestCmd?.length) return requestCmd.join(" ");
-  return job.afl?.target_binary ?? "—";
-}
-
-function jobTargetBinary(job: Job): string {
-  return job.target_cmd?.[0] ?? reqArray(job, "target_cmd")?.[0] ?? job.afl?.target_binary ?? "—";
-}
-
-function jobWorkers(job: Job): string {
-  return String(job.afl?.workers ?? (typeof job.request?.workers === "number" ? job.request.workers : 1));
-}
-
-function jobProtocol(job: Job): string {
-  return job.protocol ?? reqStr(job, "protocol") ?? "未标注";
-}
-
-function jobNode(job: Job): string {
-  const meta = metadata(job);
-  const metaNode = typeof meta.node_name === "string" ? meta.node_name : undefined;
-  return reqStr(job, "node_name") ?? metaNode ?? "未指定";
-}
-
-function jobAflBinary(job: Job): string {
-  return job.afl_path ?? reqStr(job, "afl_path") ?? job.afl?.afl_binary ?? "afl-fuzz";
-}
-
-function jobScheduler(job: Job): string {
-  const meta = metadata(job);
-  const metaScheduler = typeof meta.scheduler === "string" ? meta.scheduler : undefined;
-  return reqStr(job, "scheduler") ?? metaScheduler ?? "未指定";
-}
-
-function jobRiskEnabled(job: Job): boolean {
-  const meta = metadata(job);
-  const metaRisk = typeof meta.risk_enabled === "boolean" ? meta.risk_enabled : undefined;
-  return reqBool(job, "risk_enabled") ?? metaRisk ?? false;
-}
-
-function jobHasCrash(job: Job): boolean {
-  const metrics = job.last_metrics;
-  const request = isRecord(job.request) ? job.request : {};
-  const value = metrics?.unique_crashes ?? request.unique_crashes;
-  return typeof value === "number" ? value > 0 : false;
-}
-
-function jobHasHang(job: Job): boolean {
-  const metrics = job.last_metrics;
-  const request = isRecord(job.request) ? job.request : {};
-  const value = metrics?.unique_hangs ?? request.unique_hangs;
-  return typeof value === "number" ? value > 0 : false;
-}
-
-function jobHasArtifact(job: Job): boolean {
-  return jobHasCrash(job) || jobHasHang(job);
-}
-
-function jobTimestamp(job: Job, key: "created_at" | "updated_at"): number {
-  const value = job[key];
-  if (!value) return 0;
-  const time = new Date(value).getTime();
-  return Number.isFinite(time) ? time : 0;
-}
-
-function sameOrAfter(date: string | undefined, from: string): boolean {
-  if (!from) return true;
-  if (!date) return false;
-  return new Date(date).getTime() >= new Date(from).getTime();
-}
-
-function sameOrBefore(date: string | undefined, to: string): boolean {
-  if (!to) return true;
-  if (!date) return false;
-  return new Date(date).getTime() <= new Date(to).getTime();
-}
-
-type TriState = "all" | "yes" | "no";
-type SortField = "updated_at" | "created_at" | "status" | "protocol" | "name" | "target" | "workers";
-type SortDirection = "desc" | "asc";
-
-const statuses: Array<JobStatus | "all"> = ["all", "starting", "running", "stopping", "finished", "failed"];
-const triStateOptions: Array<{ value: TriState; label: string }> = [
-  { value: "all", label: "全部" },
-  { value: "yes", label: "是" },
-  { value: "no", label: "否" },
-];
-
-function FormBlock({ label, children }: { label: string; children: JSX.Element }): JSX.Element {
-  return (
-    <div className="grid gap-2">
-      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-      {children}
-    </div>
-  );
-}
-
-function FilterChip({ label, value }: { label: string; value: string }): JSX.Element {
-  return <span className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs text-muted-foreground">{label}：{value}</span>;
-}
-
-function JobsListPanel(): JSX.Element {
-  const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: jobsApi.listJobs, refetchInterval: 5_000 });
-  const [search, setSearch] = useState("");
-  const deferredSearch = useDeferredValue(search);
-  const [status, setStatus] = useState<JobStatus | "all">("all");
-  const [protocol, setProtocol] = useState("all");
-  const [targetBinary, setTargetBinary] = useState("");
-  const [nodeName, setNodeName] = useState("all");
-  const [aflBinary, setAflBinary] = useState("all");
-  const [scheduler, setScheduler] = useState("all");
-  const [riskEnabled, setRiskEnabled] = useState<TriState>("all");
-  const [hasCrash, setHasCrash] = useState<TriState>("all");
-  const [hasHang, setHasHang] = useState<TriState>("all");
-  const [hasArtifact, setHasArtifact] = useState<TriState>("all");
-  const [createdFrom, setCreatedFrom] = useState("");
-  const [createdTo, setCreatedTo] = useState("");
-  const [updatedFrom, setUpdatedFrom] = useState("");
-  const [updatedTo, setUpdatedTo] = useState("");
-  const [sortField, setSortField] = useState<SortField>("updated_at");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-
-  const jobs = jobsQuery.data ?? [];
-  const protocolOptions = useMemo(() => ["all", ...new Set(jobs.map(jobProtocol).filter(Boolean))], [jobs]);
-  const nodeOptions = useMemo(() => ["all", ...new Set(jobs.map(jobNode).filter(Boolean))], [jobs]);
-  const aflOptions = useMemo(() => ["all", ...new Set(jobs.map(jobAflBinary).filter(Boolean))], [jobs]);
-  const schedulerOptions = useMemo(() => ["all", ...new Set(jobs.map(jobScheduler).filter(Boolean))], [jobs]);
-
-  const filteredData = useMemo(() => {
-    const normalizedSearch = deferredSearch.trim().toLowerCase();
-    const rows = jobs.filter((job) => {
-      const rowProtocol = jobProtocol(job);
-      const rowNode = jobNode(job);
-      const rowAfl = jobAflBinary(job);
-      const rowScheduler = jobScheduler(job);
-      const rowTargetBinary = jobTargetBinary(job).toLowerCase();
-      const haystack = [jobName(job), jobTarget(job), rowProtocol, rowNode, rowAfl, rowScheduler].join(" ").toLowerCase();
-      if (status !== "all" && job.status !== status) return false;
-      if (protocol !== "all" && rowProtocol !== protocol) return false;
-      if (nodeName !== "all" && rowNode !== nodeName) return false;
-      if (aflBinary !== "all" && rowAfl !== aflBinary) return false;
-      if (scheduler !== "all" && rowScheduler !== scheduler) return false;
-      if (targetBinary.trim() && !rowTargetBinary.includes(targetBinary.trim().toLowerCase())) return false;
-      if (normalizedSearch && !haystack.includes(normalizedSearch)) return false;
-      if (riskEnabled !== "all" && jobRiskEnabled(job) !== (riskEnabled === "yes")) return false;
-      if (hasCrash !== "all" && jobHasCrash(job) !== (hasCrash === "yes")) return false;
-      if (hasHang !== "all" && jobHasHang(job) !== (hasHang === "yes")) return false;
-      if (hasArtifact !== "all" && jobHasArtifact(job) !== (hasArtifact === "yes")) return false;
-      if (!sameOrAfter(job.created_at, createdFrom)) return false;
-      if (!sameOrBefore(job.created_at, createdTo)) return false;
-      if (!sameOrAfter(job.updated_at, updatedFrom)) return false;
-      if (!sameOrBefore(job.updated_at, updatedTo)) return false;
-      return true;
-    });
-
-    return rows.slice().sort((left, right) => {
-      const order = sortDirection === "asc" ? 1 : -1;
-      if (sortField === "updated_at" || sortField === "created_at") return (jobTimestamp(left, sortField) - jobTimestamp(right, sortField)) * order;
-      if (sortField === "workers") return (Number(jobWorkers(left)) - Number(jobWorkers(right))) * order;
-      const leftValue = sortField === "status" ? translateJobStatus(left.status) : sortField === "protocol" ? jobProtocol(left) : sortField === "target" ? jobTargetBinary(left) : jobName(left);
-      const rightValue = sortField === "status" ? translateJobStatus(right.status) : sortField === "protocol" ? jobProtocol(right) : sortField === "target" ? jobTargetBinary(right) : jobName(right);
-      return leftValue.localeCompare(rightValue, "zh-CN") * order;
-    });
-  }, [aflBinary, createdFrom, createdTo, deferredSearch, hasArtifact, hasCrash, hasHang, jobs, nodeName, protocol, riskEnabled, scheduler, sortDirection, sortField, status, targetBinary, updatedFrom, updatedTo]);
-
-  const columns = useMemo<ColumnDef<Job>[]>(() => [
-    {
-      id: "name",
-      header: "任务",
-      cell: ({ row }) => (
-        <div className="space-y-1">
-          <Link to={`/jobs/${row.original.job_id}`} className="font-medium text-primary hover:underline">{jobName(row.original)}</Link>
-          <p className="max-w-[28rem] truncate text-xs text-muted-foreground">{jobTarget(row.original)}</p>
-        </div>
-      ),
-    },
-    { id: "status", header: "状态", cell: ({ row }) => <StatusBadge status={row.original.status} /> },
-    {
-      id: "protocol",
-      header: "协议 / 节点",
-      cell: ({ row }) => <div className="space-y-1 text-xs text-muted-foreground"><p>{jobProtocol(row.original)}</p><p>{jobNode(row.original)}</p></div>,
-    },
-    {
-      id: "runtime",
-      header: "AFL / 调度 / 并行",
-      cell: ({ row }) => <div className="space-y-1 text-xs text-muted-foreground"><p>{jobAflBinary(row.original)}</p><p>{jobScheduler(row.original)} · workers {jobWorkers(row.original)}</p></div>,
-    },
-    {
-      id: "signals",
-      header: "风险 / 样本信号",
-      cell: ({ row }) => <div className="space-y-1 text-xs text-muted-foreground"><p>risk {jobRiskEnabled(row.original) ? "on" : "off"}</p><p>crash {jobHasCrash(row.original) ? "yes" : "no"} · hang {jobHasHang(row.original) ? "yes" : "no"}</p></div>,
-    },
-    {
-      id: "updated_at",
-      header: "更新时间",
-      cell: ({ row }) => <div className="space-y-1 text-xs text-muted-foreground"><p>{formatDateTime(row.original.updated_at)}</p><p>创建于 {formatDateTime(row.original.created_at)}</p></div>,
-    },
-    { id: "actions", header: "", cell: ({ row }) => <Button asChild size="sm" variant="outline"><Link to={`/jobs/${row.original.job_id}`}>查看详情</Link></Button> },
-  ], []);
-
-  const table = useReactTable({ data: filteredData, columns, getCoreRowModel: getCoreRowModel() });
-  const activeFilterSummary = [
-    status !== "all" ? { label: "状态", value: translateJobStatus(status) } : null,
-    protocol !== "all" ? { label: "协议", value: protocol } : null,
-    nodeName !== "all" ? { label: "节点", value: nodeName } : null,
-    aflBinary !== "all" ? { label: "AFL", value: aflBinary } : null,
-    scheduler !== "all" ? { label: "调度", value: scheduler } : null,
-    targetBinary.trim() ? { label: "目标程序", value: targetBinary.trim() } : null,
-    riskEnabled !== "all" ? { label: "risk", value: riskEnabled === "yes" ? "启用" : "关闭" } : null,
-    hasCrash !== "all" ? { label: "crash", value: hasCrash === "yes" ? "有" : "无" } : null,
-    hasHang !== "all" ? { label: "hang", value: hasHang === "yes" ? "有" : "无" } : null,
-    hasArtifact !== "all" ? { label: "artifact", value: hasArtifact === "yes" ? "有" : "无" } : null,
-    deferredSearch.trim() ? { label: "关键词", value: deferredSearch.trim() } : null,
-  ].filter(Boolean) as Array<{ label: string; value: string }>;
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base"><SlidersHorizontal className="size-4 text-[hsl(var(--accent-blue))]" />高密度过滤面板</CardTitle>
-          <CardDescription>当前高级筛选与排序仍是前端本地计算，真实列表来自 `GET /api/v1/jobs`。</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.3fr)_repeat(4,minmax(0,1fr))]">
-            <div className="relative xl:col-span-2">
-              <Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
-              <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索任务名、目标命令、协议、节点、AFL binary" />
-            </div>
-            <Select value={status} onValueChange={(value) => setStatus(value as JobStatus | "all")}><SelectTrigger><SelectValue placeholder="状态" /></SelectTrigger><SelectContent>{statuses.map((item) => <SelectItem key={item} value={item}>{item === "all" ? "全部状态" : translateJobStatus(item)}</SelectItem>)}</SelectContent></Select>
-            <Select value={protocol} onValueChange={setProtocol}><SelectTrigger><SelectValue placeholder="协议" /></SelectTrigger><SelectContent>{protocolOptions.map((item) => <SelectItem key={item} value={item}>{item === "all" ? "全部协议" : item}</SelectItem>)}</SelectContent></Select>
-            <Select value={nodeName} onValueChange={setNodeName}><SelectTrigger><SelectValue placeholder="节点" /></SelectTrigger><SelectContent>{nodeOptions.map((item) => <SelectItem key={item} value={item}>{item === "all" ? "全部节点" : item}</SelectItem>)}</SelectContent></Select>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <FormBlock label="目标程序"><Input value={targetBinary} onChange={(event) => setTargetBinary(event.target.value)} placeholder="按 target binary 模糊匹配" /></FormBlock>
-            <FormBlock label="AFL binary"><Select value={aflBinary} onValueChange={setAflBinary}><SelectTrigger><SelectValue placeholder="AFL binary" /></SelectTrigger><SelectContent>{aflOptions.map((item) => <SelectItem key={item} value={item}>{item === "all" ? "全部 AFL binary" : item}</SelectItem>)}</SelectContent></Select></FormBlock>
-            <FormBlock label="调度策略"><Select value={scheduler} onValueChange={setScheduler}><SelectTrigger><SelectValue placeholder="调度策略" /></SelectTrigger><SelectContent>{schedulerOptions.map((item) => <SelectItem key={item} value={item}>{item === "all" ? "全部调度策略" : item}</SelectItem>)}</SelectContent></Select></FormBlock>
-            <FormBlock label="risk 是否启用"><Select value={riskEnabled} onValueChange={(value) => setRiskEnabled(value as TriState)}><SelectTrigger><SelectValue placeholder="risk" /></SelectTrigger><SelectContent>{triStateOptions.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select></FormBlock>
-            <FormBlock label="排序字段"><Select value={sortField} onValueChange={(value) => setSortField(value as SortField)}><SelectTrigger><SelectValue placeholder="排序字段" /></SelectTrigger><SelectContent><SelectItem value="updated_at">更新时间</SelectItem><SelectItem value="created_at">创建时间</SelectItem><SelectItem value="status">状态</SelectItem><SelectItem value="protocol">协议</SelectItem><SelectItem value="name">任务名</SelectItem><SelectItem value="target">目标程序</SelectItem><SelectItem value="workers">并行数</SelectItem></SelectContent></Select></FormBlock>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <FormBlock label="是否有 crash"><Select value={hasCrash} onValueChange={(value) => setHasCrash(value as TriState)}><SelectTrigger><SelectValue placeholder="crash" /></SelectTrigger><SelectContent>{triStateOptions.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select></FormBlock>
-            <FormBlock label="是否有 hang"><Select value={hasHang} onValueChange={(value) => setHasHang(value as TriState)}><SelectTrigger><SelectValue placeholder="hang" /></SelectTrigger><SelectContent>{triStateOptions.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select></FormBlock>
-            <FormBlock label="是否有 artifact"><Select value={hasArtifact} onValueChange={(value) => setHasArtifact(value as TriState)}><SelectTrigger><SelectValue placeholder="artifact" /></SelectTrigger><SelectContent>{triStateOptions.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select></FormBlock>
-            <FormBlock label="排序方向"><Select value={sortDirection} onValueChange={(value) => setSortDirection(value as SortDirection)}><SelectTrigger><SelectValue placeholder="排序方向" /></SelectTrigger><SelectContent><SelectItem value="desc">降序</SelectItem><SelectItem value="asc">升序</SelectItem></SelectContent></Select></FormBlock>
-            <div className="flex items-end"><Button type="button" variant="outline" className="w-full" onClick={() => { setSearch(""); setStatus("all"); setProtocol("all"); setTargetBinary(""); setNodeName("all"); setAflBinary("all"); setScheduler("all"); setRiskEnabled("all"); setHasCrash("all"); setHasHang("all"); setHasArtifact("all"); setCreatedFrom(""); setCreatedTo(""); setUpdatedFrom(""); setUpdatedTo(""); setSortField("updated_at"); setSortDirection("desc"); }}>重置筛选</Button></div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <FormBlock label="创建时间起"><Input type="date" value={createdFrom} onChange={(event) => setCreatedFrom(event.target.value)} /></FormBlock>
-            <FormBlock label="创建时间止"><Input type="date" value={createdTo} onChange={(event) => setCreatedTo(event.target.value)} /></FormBlock>
-            <FormBlock label="更新时间起"><Input type="date" value={updatedFrom} onChange={(event) => setUpdatedFrom(event.target.value)} /></FormBlock>
-            <FormBlock label="更新时间止"><Input type="date" value={updatedTo} onChange={(event) => setUpdatedTo(event.target.value)} /></FormBlock>
-          </div>
-
-          {activeFilterSummary.length > 0 ? <div className="flex flex-wrap gap-2">{activeFilterSummary.map((item) => <FilterChip key={`${item.label}-${item.value}`} label={item.label} value={item.value} />)}</div> : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle>任务列表</CardTitle>
-          <CardDescription>当前共 {filteredData.length} 条，接口刷新频率 5 秒。</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>{table.getHeaderGroups().map((group) => <TableRow key={group.id}>{group.headers.map((header) => <TableHead key={header.id}>{header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}</TableHead>)}</TableRow>)}</TableHeader>
-            <TableBody>
-              {table.getRowModel().rows.length ? table.getRowModel().rows.map((row) => <TableRow key={row.id}>{row.getVisibleCells().map((cell) => <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}</TableRow>) : <TableRow><TableCell colSpan={7} className="py-16 text-center text-muted-foreground">当前筛选条件下没有任务记录。</TableCell></TableRow>}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function JobsMonitorPanel(): JSX.Element {
-  const summaryQuery = useQuery({ queryKey: ["jobs-summary"], queryFn: jobsApi.requestSummary });
-  const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: jobsApi.listJobs, refetchInterval: 5_000 });
-  const artifactsQuery = useQuery({ queryKey: ["assets-jobs"], queryFn: () => assetsApi.listAssets({ scope: "jobs" }) });
-
-  const summary = (summaryQuery.data as Record<string, unknown> | null) ?? {};
-  const recentJobs = (summary.recent_jobs as Job[] | undefined) ?? (jobsQuery.data ?? []).slice(0, 8);
-  const recentArtifacts = (artifactsQuery.data ?? []).slice(0, 8);
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard title="任务总数" value={String(summary.total ?? jobsQuery.data?.length ?? 0)} hint="jobs/summary" statusColor="blue" />
-        <SummaryCard title="运行中" value={String(summary.running ?? 0)} hint="running" statusColor="teal" />
-        <SummaryCard title="Crash" value={String(summary.crash_count ?? 0)} hint="artifact signals" statusColor="rose" />
-        <SummaryCard title="Hang" value={String(summary.hang_count ?? 0)} hint="artifact signals" statusColor="gold" />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base"><ActivitySquare className="size-4 text-[hsl(var(--accent-blue))]" />最近任务</CardTitle>
-            <CardDescription>保留 Fuzz 任务主入口，同时在监控区汇总最近运行状态。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {recentJobs.length === 0 ? <div className="rounded-[var(--radius-lg)] border border-dashed border-border/70 bg-background/50 px-4 py-8 text-sm text-muted-foreground">暂无任务数据。</div> : recentJobs.map((job) => (
-              <div key={job.job_id} className="rounded-[var(--radius-lg)] border border-border/60 bg-background/50 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link to={`/jobs/${job.job_id}`} className="truncate text-sm font-medium text-primary hover:underline">{jobName(job)}</Link>
-                    <p className="mt-1 truncate text-xs text-muted-foreground">{jobTarget(job)}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">{jobProtocol(job)} / {jobNode(job)} / {jobAflBinary(job)}</p>
-                  </div>
-                  <StatusBadge status={job.status} />
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>任务产物</CardTitle>
-            <CardDescription>复用产物搜索接口，集中查看 `jobs` scope 可视资源。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {recentArtifacts.length === 0 ? <div className="rounded-[var(--radius-lg)] border border-dashed border-border/70 bg-background/50 px-4 py-8 text-sm text-muted-foreground">暂无可视产物。</div> : recentArtifacts.map((item: AssetListItem, index) => (
-              <div key={`${item.workspace_ref}-${index}`} className="rounded-[var(--radius-lg)] border border-border/60 bg-background/50 p-4">
-                <p className="text-sm font-medium">{item.name ?? item.virtual_path ?? item.workspace_ref}</p>
-                <p className="mt-1 break-all text-xs text-muted-foreground">{item.workspace_ref}</p>
-                <p className="mt-2 text-xs text-muted-foreground">{item.protocol} / {item.scope ?? "jobs"} / {item.kind ?? item.type ?? "-"}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
+type ExecutionMode = (typeof executionModeOptions)[number]["value"];
 
 export function JobsView(): JSX.Element {
-  const [tab, setTab] = useState("create");
+  const [tab, setTab] = useState<JobsFlowTabKey>("compose");
+  const [query, setQuery] = useState<JobsListQuery>({ sort: "updated_at", order: "desc" });
+  const [selectedMonitorJobId, setSelectedMonitorJobId] = useState<string | undefined>(undefined);
+  const [selectedMonitorJobHistory, setSelectedMonitorJobHistory] = useState<Metrics[]>([]);
+  const [form, setForm] = useState({
+    protocol: "legacy-default",
+    cwd: "",
+    sourceDir: "",
+    buildDir: "",
+    executionMode: "runtime" as ExecutionMode,
+    launchProfileId: "",
+    selectedTargetId: "",
+    targetBinary: "",
+    targetArgs: "",
+    dryRun: true,
+    aflPath: "afl-fuzz",
+    scheduler: "auto",
+    workers: "1",
+    timeoutSec: "3600",
+    memoryLimitMb: "none",
+    inputDir: "",
+    outputDir: "",
+    singleInputRef: "",
+    transportType: "stdin",
+    transportConfig: "{}",
+    env: '{"AFL_SKIP_CPUFREQ":"1"}',
+    fuzzerArgs: "-m none -t 1000+",
+    notes: "",
+    operationId: "",
+    nodeName: "",
+    riskEnabled: false,
+    buildSystem: "",
+    compiler: "afl-clang-fast",
+    sanitizerMode: "none",
+    instrumentationMode: "llvm",
+    buildType: "RelWithDebInfo",
+    generator: "",
+    parallelism: "4",
+    buildTarget: "",
+    extraCFlags: "",
+    extraCxxFlags: "",
+    extraLdFlags: "",
+    selectedSuggestionId: "",
+    useLlmBuildAssist: false,
+  });
+
+  useEffect(() => {
+    dockLog("info", "job", "entered jobs workspace", { tab });
+    return () => dockLog("info", "job", "left jobs workspace");
+  }, [tab]);
+
+  const protocolsQuery = useQuery({ queryKey: ["protocols"], queryFn: protocolsApi.listProtocols, retry: 0 });
+  const buildProbeQuery = useQuery({
+    queryKey: ["build-probe", form.protocol],
+    queryFn: () => buildAssistantApi.probe(form.protocol),
+    enabled: Boolean(form.protocol),
+    staleTime: 10_000,
+  });
+  const launchProfilesQuery = useQuery({
+    queryKey: ["launch-profiles", form.protocol],
+    queryFn: () => buildAssistantApi.listLaunchProfiles(form.protocol),
+    enabled: Boolean(form.protocol),
+  });
+  const targetsQuery = useQuery({
+    queryKey: ["build-targets", form.protocol],
+    queryFn: () => buildAssistantApi.listTargets(form.protocol),
+    enabled: Boolean(form.protocol),
+  });
+  const jobsQuery = useQuery({ queryKey: ["jobs", query], queryFn: () => jobsApi.listJobs(query), refetchInterval: 5000 });
+  const summaryQuery = useQuery({ queryKey: ["jobs-summary", query], queryFn: () => jobsApi.requestSummary(query), refetchInterval: 5000 });
+  const monitorQuery = useQuery({
+    queryKey: ["jobs-monitor-overview", selectedMonitorJobId, query.protocol, query.status],
+    queryFn: () => jobsApi.getMonitorOverview({ job_id: selectedMonitorJobId, protocol: query.protocol, status: query.status }),
+    refetchInterval: 5000,
+  });
+  const monitorMetricsHistoryQuery = useQuery({
+    queryKey: ["jobs-monitor-metrics-history", selectedMonitorJobId],
+    queryFn: () => jobsApi.getMetricsHistory(selectedMonitorJobId ?? "", 300),
+    enabled: tab === "monitor" && Boolean(selectedMonitorJobId),
+    refetchInterval: 5000,
+  });
+
+  useEffect(() => {
+    const probe = buildProbeQuery.data;
+    if (!probe) return;
+    setForm((current) => ({
+      ...current,
+      buildSystem: current.buildSystem || probe.preferred_build_system || uniqueBuildSystems(probe)[0] || "manual",
+      compiler: current.compiler || probe.allowed_compilers[0] || "afl-clang-fast",
+      sanitizerMode: current.sanitizerMode || probe.sanitizer_modes?.[0]?.mode || "none",
+      aflPath: current.aflPath || probe.runtime_tools?.[0]?.tool_id || "afl-fuzz",
+    }));
+  }, [buildProbeQuery.data]);
+
+  const createMutation = useMutation({
+    mutationFn: (payload: JobCreateRequest) => jobsApi.createJob(payload),
+    onSuccess: async (job) => {
+      dockLog("success", "job", `job created: ${job.job_id}`, { protocol: job.protocol, status: job.status });
+      setTab("monitor");
+      setSelectedMonitorJobId(job.job_id);
+      await Promise.all([jobsQuery.refetch(), summaryQuery.refetch(), monitorQuery.refetch()]);
+    },
+    onError: (error) => dockLog("error", "job", "job create failed", error),
+  });
+
+  const buildPlanMutation = useMutation({
+    mutationFn: () =>
+      buildAssistantApi.createPlan(form.protocol, {
+        protocol: form.protocol,
+        source_ref: buildProbeQuery.data?.source_ref,
+        compiler: form.compiler,
+        instrumentation_mode: form.instrumentationMode,
+        sanitizer_mode: form.sanitizerMode,
+        build_system: form.buildSystem,
+        build_type: form.buildType,
+        generator: form.generator,
+        parallelism: Number(form.parallelism || 4) || 4,
+        build_target: form.buildTarget || undefined,
+        extra_cflags: form.extraCFlags,
+        extra_cxxflags: form.extraCxxFlags,
+        extra_ldflags: form.extraLdFlags,
+        selected_suggestion_id: form.selectedSuggestionId || undefined,
+        use_llm: form.useLlmBuildAssist,
+      }),
+    onSuccess: (plan) => {
+      dockLog("success", "job", `build plan ready: ${plan.plan_id}`, { build_system: plan.build_system, compiler: plan.compiler });
+    },
+    onError: (error) => dockLog("error", "job", "build plan create failed", error),
+  });
+
+  const buildRunMutation = useMutation({
+    mutationFn: () => {
+      const planId = buildPlanMutation.data?.plan_id;
+      if (!planId) throw new Error("请先生成 BuildPlan");
+      return buildAssistantApi.runPlan(form.protocol, planId);
+    },
+    onSuccess: async (run) => {
+      dockLog("success", "job", `build run ready: ${run.build_id}`, { targets: run.targets.length });
+      if (run.targets[0]?.target_id) {
+        setForm((current) => ({ ...current, selectedTargetId: current.selectedTargetId || run.targets[0].target_id, targetBinary: current.targetBinary || run.targets[0].binary_ref }));
+      }
+      await Promise.all([targetsQuery.refetch(), launchProfilesQuery.refetch()]);
+    },
+    onError: (error) => dockLog("error", "job", "build run failed", error),
+  });
+
+  const predictProfileMutation = useMutation({
+    mutationFn: () =>
+      buildAssistantApi.predictLaunchProfile(form.protocol, {
+        build_id: buildRunMutation.data?.build_id,
+        target_id: form.selectedTargetId || undefined,
+        afl_tool_id: form.aflPath,
+        input_ref: form.inputDir || undefined,
+        output_ref: form.outputDir || undefined,
+        single_input_ref: form.singleInputRef || undefined,
+        scheduler: form.scheduler,
+        timeout: form.timeoutSec,
+        memory_limit: form.memoryLimitMb,
+        sanitizer_mode: form.sanitizerMode,
+        env: parseKeyValues(form.env),
+        extra_afl_args: parseCommand(form.fuzzerArgs),
+        target_args: parseCommand(form.targetArgs),
+      }),
+    onSuccess: async (profile) => {
+      dockLog("success", "job", `launch profile predicted: ${profile.profile_id}`, { afl_tool_id: profile.afl_tool_id, runner_compatible: profile.runner_compatible });
+      setForm((current) => ({ ...current, launchProfileId: profile.profile_id }));
+      await launchProfilesQuery.refetch();
+    },
+    onError: (error) => dockLog("error", "job", "predict launch profile failed", error),
+  });
+
+  const jobs = jobsQuery.data ?? [];
+  const summary = summaryQuery.data;
+  const probe = buildProbeQuery.data;
+  const protocolOptions = useMemo(
+    () => Array.from(new Set([...(protocolsQuery.data ?? []), ...jobs.map((item) => item.protocol ?? "").filter(Boolean)])),
+    [jobs, protocolsQuery.data],
+  );
+  const nodeOptions = useMemo(
+    () => Array.from(new Set(jobs.map((item) => String((item.request as Record<string, unknown> | undefined)?.node_name ?? "未指定")).filter(Boolean))),
+    [jobs],
+  );
+  const schedulerListOptions = useMemo(
+    () => Array.from(new Set(jobs.map((item) => String((item.request as Record<string, unknown> | undefined)?.scheduler ?? "未指定")).filter(Boolean))),
+    [jobs],
+  );
+
+  useEffect(() => {
+    if (tab !== "monitor") return;
+    if (selectedMonitorJobId) return;
+    const fallbackJobId = monitorQuery.data?.recent_task_activity?.[0]?.job_id;
+    if (fallbackJobId) {
+      setSelectedMonitorJobId(fallbackJobId);
+      dockLog("info", "job", `default monitor job ${fallbackJobId}`);
+    }
+  }, [monitorQuery.data, selectedMonitorJobId, tab]);
+
+  useEffect(() => {
+    if (monitorMetricsHistoryQuery.data) {
+      setSelectedMonitorJobHistory(monitorMetricsHistoryQuery.data);
+    } else if (!selectedMonitorJobId) {
+      setSelectedMonitorJobHistory([]);
+    }
+  }, [monitorMetricsHistoryQuery.data, selectedMonitorJobId]);
+
+  const selectedProfile = useMemo(
+    () => (launchProfilesQuery.data ?? []).find((item) => item.profile_id === form.launchProfileId),
+    [form.launchProfileId, launchProfilesQuery.data],
+  );
+  const targetOptions = targetsQuery.data ?? [];
+  const selectedTarget = useMemo(
+    () => targetOptions.find((item) => item.target_id === form.selectedTargetId) ?? null,
+    [form.selectedTargetId, targetOptions],
+  );
+  const runtimeTools = probe?.runtime_tools ?? [
+    { tool_id: "afl-fuzz", label: "afl-fuzz", binary_path: "afl-fuzz", category: "monitored", runner_compatible: true, requires_target: true, input_kind: "directory", output_kind: "directory", default_args: ["-m", "none", "-t", "1000+"], notes: [] },
+  ];
+  const selectedRuntimeTool = useMemo<RuntimeToolDefinition | null>(
+    () => runtimeTools.find((item) => item.tool_id === form.aflPath) ?? runtimeTools[0] ?? null,
+    [form.aflPath, runtimeTools],
+  );
+  const sanitizerModes = probe?.sanitizer_modes ?? [{ mode: "none", label: "默认", env: {}, description: "保持默认" } satisfies SanitizerModeDefinition];
+  const buildSystems = uniqueBuildSystems(probe);
+  const buildSuggestions: BuildSuggestion[] = buildPlanMutation.data?.build_suggestions ?? probe?.build_suggestions ?? [];
+  const primaryBuildSuggestions = useMemo(
+    () => buildSuggestions.filter((item) => !form.buildSystem || item.build_system === form.buildSystem || item.phase === "suggestion"),
+    [buildSuggestions, form.buildSystem],
+  );
+
+  const payload = useMemo<JobCreateRequest>(() => ({
+    protocol: form.protocol || "legacy-default",
+    cwd: form.cwd || undefined,
+    target_cmd: [form.targetBinary, ...parseCommand(form.targetArgs)].filter(Boolean),
+    afl_path: form.aflPath || "afl-fuzz",
+    input_dir: form.inputDir || undefined,
+    output_dir: form.outputDir || undefined,
+    timeout_sec: Number(form.timeoutSec || 0) || undefined,
+    memory_limit_mb: form.memoryLimitMb === "none" ? undefined : Number(form.memoryLimitMb || 0) || undefined,
+    workers: Number(form.workers || 1) || 1,
+    scheduler: form.scheduler === "auto" ? undefined : form.scheduler,
+    risk_enabled: form.riskEnabled,
+    node_name: form.nodeName || undefined,
+    notes: form.notes || undefined,
+    operation_id: form.operationId || undefined,
+    launch_profile_id: form.launchProfileId || undefined,
+    fuzzer_args: parseCommand(form.fuzzerArgs),
+    env: parseKeyValues(form.env),
+    dry_run: form.dryRun,
+    debug: {
+      transport_type: form.transportType,
+      transport_config: parseKeyValues(form.transportConfig),
+    },
+  }), [form]);
+
+  const localCommandPreview = useMemo(
+    () =>
+      estimateToolCommand({
+        tool: selectedRuntimeTool,
+        targetBinary: selectedTarget?.binary_ref || form.targetBinary,
+        targetArgs: parseCommand(form.targetArgs),
+        inputDir: form.inputDir,
+        outputDir: form.outputDir,
+        singleInput: form.singleInputRef,
+        scheduler: form.scheduler,
+        timeoutSec: form.timeoutSec,
+        memoryLimitMb: form.memoryLimitMb,
+        fuzzerArgs: parseCommand(form.fuzzerArgs),
+      }),
+    [form.aflPath, form.targetBinary, form.targetArgs, form.inputDir, form.outputDir, form.singleInputRef, form.scheduler, form.timeoutSec, form.memoryLimitMb, form.fuzzerArgs, selectedRuntimeTool, selectedTarget],
+  );
+
+  const runnerReadyProfile = predictProfileMutation.data ?? selectedProfile;
+  const validationWarnings = useMemo(() => {
+    const warnings: string[] = [];
+    if (!payload.protocol) warnings.push("需要指定 protocol 才能生成任务。");
+    if (form.executionMode !== "build" && selectedRuntimeTool?.requires_target && !form.targetBinary && !selectedTarget && !payload.launch_profile_id) {
+      warnings.push("当前 AFL 工具需要 target binary；请从 Build targets 选择，或手动填写 targetBinary。");
+    }
+    if (form.executionMode !== "build" && selectedRuntimeTool?.input_kind === "directory" && !form.inputDir) {
+      warnings.push("该工具需要输入目录，请填写 input dir 或 workspace ref。");
+    }
+    if (form.executionMode !== "build" && selectedRuntimeTool?.input_kind.includes("single_file") && !form.singleInputRef) {
+      warnings.push("该工具需要单个 testcase 路径；如果暂时无法自动分析，请先用侧栏命令建议。\n");
+    }
+    if (form.executionMode !== "build" && selectedRuntimeTool?.output_kind !== "none" && !form.outputDir) {
+      warnings.push("建议填写 output 路径，避免运行后无法回收结果或输出文件。");
+    }
+    if (form.executionMode === "runtime" && payload.launch_profile_id && selectedProfile?.runner_compatible === false && !payload.dry_run) {
+      warnings.push("当前 LaunchProfile 对应的 AFL 工具不兼容实时监控 Runner；请改为 dry_run 或使用侧栏命令建议。");
+    }
+    if (form.executionMode !== "build" && selectedRuntimeTool && !selectedRuntimeTool.runner_compatible && !form.dryRun) {
+      warnings.push("当前 AFL 工具属于单次/辅助工具，不应作为长期实时监控任务启动；建议生成命令建议侧栏后在宿主机执行。");
+    }
+    if (form.executionMode === "build" && !probe?.source_ref) {
+      warnings.push("构建辅助依赖协议源码工作区；当前协议下尚未发现 source 作用域。");
+    }
+    if (form.executionMode === "build" && !buildSystems.length) {
+      warnings.push("未检测到稳定构建系统；系统将退化为侧栏建议命令，而不是强制生成 BuildPlan。");
+    }
+    if (form.executionMode === "runtime" && !form.launchProfileId && !form.dryRun) {
+      warnings.push("正式执行建议先生成或选择 LaunchProfile，避免前端参数与服务端最终命令不一致。");
+    }
+    return warnings.map((item) => item.trim()).filter(Boolean);
+  }, [buildSystems.length, form.dryRun, form.executionMode, form.inputDir, form.launchProfileId, form.outputDir, form.singleInputRef, form.targetBinary, payload.dry_run, payload.launch_profile_id, payload.protocol, probe?.source_ref, selectedProfile?.runner_compatible, selectedRuntimeTool, selectedTarget]);
+
+  const canSubmitJob = useMemo(() => {
+    if (form.executionMode === "build") return false;
+    if (selectedRuntimeTool && !selectedRuntimeTool.runner_compatible && !form.dryRun) return false;
+    if (form.executionMode === "runtime" && !form.dryRun && !form.launchProfileId) return false;
+    if (selectedRuntimeTool?.requires_target && !form.targetBinary && !selectedTarget && !form.launchProfileId) return false;
+    if (selectedRuntimeTool?.input_kind === "directory" && !form.inputDir) return false;
+    if (selectedRuntimeTool?.input_kind.includes("single_file") && !form.singleInputRef) return false;
+    return true;
+  }, [form.dryRun, form.executionMode, form.inputDir, form.launchProfileId, form.singleInputRef, form.targetBinary, selectedRuntimeTool, selectedTarget]);
+
+  const profileSummary = [
+    { label: "protocol", value: form.protocol || "legacy-default" },
+    { label: "执行模式", value: executionModeOptions.find((item) => item.value === form.executionMode)?.label ?? form.executionMode },
+    { label: form.executionMode === "build" ? "compiler" : "AFL tool", value: form.executionMode === "build" ? form.compiler : selectedRuntimeTool?.tool_id ?? form.aflPath },
+    { label: "launch profile", value: selectedProfile?.profile_id ?? predictProfileMutation.data?.profile_id ?? "未生成" },
+    { label: "runner 兼容", value: form.executionMode === "build" ? "BuildPlan / 侧栏建议" : (runnerReadyProfile?.runner_compatible === false ? "仅建议命令" : "可进入正式 Runner") },
+    { label: "target", value: (selectedTarget?.name ?? form.targetBinary) || "—" },
+  ];
+
+  const commandBlocks = useMemo(() => {
+    const blocks: Array<{ title: string; command: string; env?: string; note?: string }> = [];
+    if (form.executionMode === "build") {
+      const steps = buildPlanMutation.data?.steps ?? [];
+      if (steps.length) {
+        steps.forEach((step, index) => {
+          blocks.push({
+            title: `BuildPlan · Step ${index + 1} · ${step.name}`,
+            command: step.argv.join(" "),
+            env: joinEnvPreview(step.env),
+            note: step.cwd_ref,
+          });
+        });
+      }
+      primaryBuildSuggestions.slice(0, 4).forEach((item) => {
+        blocks.push({
+          title: `建议命令 · ${item.label}`,
+          command: item.argv.join(" "),
+          env: joinEnvPreview(item.env),
+          note: `${item.reason} · cwd=${item.cwd_ref}`,
+        });
+      });
+      return blocks;
+    }
+
+    if (runnerReadyProfile?.command_preview?.length) {
+      blocks.push({
+        title: `服务端校准 · ${runnerReadyProfile.afl_tool_id}`,
+        command: runnerReadyProfile.command_preview.join(" "),
+        env: joinEnvPreview(runnerReadyProfile.env),
+        note: runnerReadyProfile.explanation?.join("；") || undefined,
+      });
+    }
+
+    blocks.push({
+      title: `页面预估 · ${selectedRuntimeTool?.tool_id ?? form.aflPath}`,
+      command: localCommandPreview.join(" "),
+      env: joinEnvPreview(parseKeyValues(form.env)),
+      note: selectedRuntimeTool?.notes?.join("；") || undefined,
+    });
+    return blocks;
+  }, [buildPlanMutation.data?.steps, form.aflPath, form.env, form.executionMode, localCommandPreview, primaryBuildSuggestions, runnerReadyProfile, selectedRuntimeTool]);
+
+  const assistantNotes = useMemo(() => {
+    const notes = new Set<string>();
+    selectedRuntimeTool?.notes?.forEach((item) => notes.add(item));
+    runnerReadyProfile?.warnings?.forEach((item) => notes.add(item));
+    runnerReadyProfile?.explanation?.forEach((item) => notes.add(item));
+    buildPlanMutation.data?.warnings?.forEach((item) => notes.add(item));
+    primaryBuildSuggestions.slice(0, 3).forEach((item) => notes.add(item.reason));
+    return Array.from(notes);
+  }, [buildPlanMutation.data?.warnings, primaryBuildSuggestions, runnerReadyProfile, selectedRuntimeTool]);
+
+  const tabMetrics = {
+    compose: String((launchProfilesQuery.data ?? []).length),
+    list: `${jobs.length}/${summary?.running ?? 0}`,
+    monitor: `${monitorQuery.data?.recent_artifacts?.length ?? 0}/${monitorQuery.data?.alert_timeline?.length ?? 0}`,
+  } satisfies Record<JobsFlowTabKey, string>;
+
+  const submitJob = (): void => {
+    dockLog("info", "job", "submit job payload", payload);
+    createMutation.mutate(payload);
+  };
+
   return (
     <div className="space-y-5">
-      <PageHeader
-        eyebrow="Fuzz 任务"
-        title="Fuzz 任务"
-        description="将创建任务、任务列表与监控/产物合并到同一入口，减少侧边栏分裂导航。"
+      <ApiErrorReporter error={protocolsQuery.error} title="加载协议列表失败" source="job" />
+      <ApiErrorReporter error={buildProbeQuery.error} title="加载 Build Probe 失败" source="job" />
+      <ApiErrorReporter error={launchProfilesQuery.error} title="加载 LaunchProfile 失败" source="job" />
+      <ApiErrorReporter error={targetsQuery.error} title="加载 Build targets 失败" source="job" />
+      <ApiErrorReporter error={jobsQuery.error} title="加载任务列表失败" source="job" />
+      <ApiErrorReporter error={summaryQuery.error} title="加载任务态势板失败" source="job" />
+      <ApiErrorReporter error={monitorQuery.error} title="加载运行态监控失败" source="job" />
+      <ApiErrorReporter error={monitorMetricsHistoryQuery.error} title="加载 AFL++ 指标历史失败" source="job" />
+      <ApiErrorReporter error={createMutation.error} title="创建任务失败" source="job" />
+      <ApiErrorReporter error={buildPlanMutation.error} title="生成 BuildPlan 失败" source="job" />
+      <ApiErrorReporter error={buildRunMutation.error} title="运行 BuildPlan 失败" source="job" />
+      <ApiErrorReporter error={predictProfileMutation.error} title="预测 LaunchProfile 失败" source="job" />
+
+      <PageHeroBoard
+          eyebrow="F U Z Z · J O B S"
+          title="任务中心"
+          description="将任务创建、检索与运行态监控拆分成三种工作流；右侧统一态势板只负责概览，不替代主体工作台。"
+          boardClassName="[--board-surface:276_100%_98%] [--board-border:274_54%_85%] [--board-track:274_55%_92%] [--board-accent-soft:276_92%_95%] [--board-accent:272_68%_56%] [--board-accent-strong:268_74%_44%] dark:[--board-surface:263_28%_19%] dark:[--board-border:267_32%_34%] dark:[--board-track:263_20%_28%] dark:[--board-accent-soft:268_34%_28%] dark:[--board-accent:278_85%_73%] dark:[--board-accent-strong:286_92%_82%]"
+          board={<JobsStatusBoard summary={summary} />}
       />
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex h-auto flex-wrap gap-2 bg-transparent p-0">
-          <TabsTrigger value="create" className="rounded-full border border-border/60 bg-background/60 px-4 py-2 data-[state=active]:bg-card">创建任务</TabsTrigger>
-          <TabsTrigger value="list" className="rounded-full border border-border/60 bg-background/60 px-4 py-2 data-[state=active]:bg-card">任务列表</TabsTrigger>
-          <TabsTrigger value="monitor" className="rounded-full border border-border/60 bg-background/60 px-4 py-2 data-[state=active]:bg-card">监控 / 产物</TabsTrigger>
-        </TabsList>
-        <TabsContent value="create" className="mt-4"><JobCreateView /></TabsContent>
-        <TabsContent value="list" className="mt-4"><JobsListPanel /></TabsContent>
-        <TabsContent value="monitor" className="mt-4"><JobsMonitorPanel /></TabsContent>
-      </Tabs>
+      <JobsFlowTabs value={tab} onChange={setTab} metrics={tabMetrics} />
+
+      {tab === "compose" ? (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_32rem]">
+          <div className="space-y-4">
+            <Card className="card-surface">
+              <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><Boxes className="size-4.5" /> 任务目标与上下文</CardTitle></CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-2">
+                <Input value={form.protocol} onChange={(event) => setForm((current) => ({ ...current, protocol: event.target.value }))} list="jobs-protocols" placeholder="protocol" />
+                <datalist id="jobs-protocols">{protocolOptions.map((item) => <option key={item} value={item} />)}</datalist>
+                <Input value={form.cwd} onChange={(event) => setForm((current) => ({ ...current, cwd: event.target.value }))} placeholder="cwd / workspace://..." />
+                <Select value={form.launchProfileId || "none"} onValueChange={(next) => setForm((current) => ({ ...current, launchProfileId: next === "none" ? "" : next }))}>
+                  <SelectTrigger><SelectValue placeholder="LaunchProfile" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">不使用 LaunchProfile</SelectItem>
+                    {(launchProfilesQuery.data ?? []).map((item) => <SelectItem key={item.profile_id} value={item.profile_id}>{item.profile_id}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Input value={form.targetBinary} onChange={(event) => setForm((current) => ({ ...current, targetBinary: event.target.value }))} placeholder="target binary / workspace ref" list="build-targets" />
+                <datalist id="build-targets">{targetOptions.map((item) => <option key={item.target_id} value={item.binary_ref} />)}</datalist>
+                <Input value={form.targetArgs} onChange={(event) => setForm((current) => ({ ...current, targetArgs: event.target.value }))} placeholder="target args" />
+                <Select value={form.selectedTargetId || "none"} onValueChange={(next) => {
+                  const selected = targetOptions.find((item) => item.target_id === next);
+                  setForm((current) => ({ ...current, selectedTargetId: next === "none" ? "" : next, targetBinary: selected?.binary_ref ?? current.targetBinary }));
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Build targets" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">不绑定 build target</SelectItem>
+                    {targetOptions.map((item) => <SelectItem key={item.target_id} value={item.target_id}>{item.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <div className="md:col-span-2 rounded-[var(--radius-lg)] border border-border/60 bg-background/55 p-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span className="rounded-full border border-border/60 bg-background px-2.5 py-1">构建探针</span>
+                    {(probe?.build_files ?? []).slice(0, 6).map((item) => (
+                      <span key={`${item.kind}-${item.path_ref}`} className="rounded-full border border-border/60 bg-background px-2.5 py-1">
+                        {item.kind} · {item.filename}
+                      </span>
+                    ))}
+                    {!(probe?.build_files ?? []).length ? <span>当前协议下未检测到稳定构建文件，将优先给出建议命令侧栏。</span> : null}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="card-surface">
+              <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><Wand2 className="size-4.5" /> 执行模式与 AFL 助手</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Select value={form.executionMode} onValueChange={(next) => setForm((current) => ({ ...current, executionMode: next as ExecutionMode }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{executionModeOptions.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <div className="flex items-center justify-between rounded-[var(--radius-lg)] border border-border/60 bg-background/55 px-3 py-2.5">
+                    <span className="text-sm">Dry run</span>
+                    <Switch checked={form.dryRun} onCheckedChange={(checked) => setForm((current) => ({ ...current, dryRun: checked }))} />
+                  </div>
+                </div>
+
+                {form.executionMode !== "build" ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="md:col-span-2 rounded-[var(--radius-lg)] border border-border/60 bg-background/55 p-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">AFL tool catalog</p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                        <Select value={form.aflPath} onValueChange={(next) => setForm((current) => ({ ...current, aflPath: next }))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {runtimeTools.map((item) => (
+                              <SelectItem key={item.tool_id} value={item.tool_id}>{item.tool_id}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <div className={`rounded-full border px-3 py-2 text-xs ${selectedRuntimeTool?.runner_compatible ? 'border-success/40 bg-success/10 text-success' : 'border-warning/40 bg-warning/10 text-warning-foreground'}`}>
+                          {selectedRuntimeTool?.runner_compatible ? '可进入 Runner' : '仅建议命令'}
+                        </div>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">{selectedRuntimeTool?.notes?.join(" ") || "当前工具说明将由后端 probe 提供。"}</p>
+                    </div>
+                    <Select value={form.scheduler} onValueChange={(next) => setForm((current) => ({ ...current, scheduler: next }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{schedulerOptions.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Input value={form.workers} onChange={(event) => setForm((current) => ({ ...current, workers: event.target.value }))} placeholder="workers" />
+                    <Input value={form.timeoutSec} onChange={(event) => setForm((current) => ({ ...current, timeoutSec: event.target.value }))} placeholder="timeout sec" />
+                    <Input value={form.memoryLimitMb} onChange={(event) => setForm((current) => ({ ...current, memoryLimitMb: event.target.value }))} placeholder="memory limit mb / none" />
+                    <Input value={form.inputDir} onChange={(event) => setForm((current) => ({ ...current, inputDir: event.target.value }))} placeholder={selectedRuntimeTool?.input_kind === 'directory' ? 'input dir / workspace ref' : 'input ref / workspace ref'} />
+                    <Input value={form.outputDir} onChange={(event) => setForm((current) => ({ ...current, outputDir: event.target.value }))} placeholder={selectedRuntimeTool?.output_kind === 'directory' ? 'output dir / workspace ref' : 'output file / workspace ref'} />
+                    {(selectedRuntimeTool?.input_kind ?? '').includes('single_file') ? (
+                      <Input value={form.singleInputRef} onChange={(event) => setForm((current) => ({ ...current, singleInputRef: event.target.value }))} placeholder="single testcase path / workspace ref" className="md:col-span-2" />
+                    ) : null}
+                    <Select value={form.transportType} onValueChange={(next) => setForm((current) => ({ ...current, transportType: next }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{transportOptions.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Input value={form.nodeName} onChange={(event) => setForm((current) => ({ ...current, nodeName: event.target.value }))} placeholder="node name" />
+                    <div className="md:col-span-2 flex items-center justify-between rounded-[var(--radius-lg)] border border-border/60 bg-background/55 px-3 py-2.5">
+                      <span className="text-sm">Risk enabled</span>
+                      <Switch checked={form.riskEnabled} onCheckedChange={(checked) => setForm((current) => ({ ...current, riskEnabled: checked }))} />
+                    </div>
+                    <Textarea className="md:col-span-2 min-h-[88px]" value={form.transportConfig} onChange={(event) => setForm((current) => ({ ...current, transportConfig: event.target.value }))} placeholder='transport config JSON' />
+                    <Textarea className="min-h-[88px]" value={form.env} onChange={(event) => setForm((current) => ({ ...current, env: event.target.value }))} placeholder='env JSON' />
+                    <Textarea className="min-h-[88px]" value={form.fuzzerArgs} onChange={(event) => setForm((current) => ({ ...current, fuzzerArgs: event.target.value }))} placeholder='tool / fuzzer args' />
+                    <Input value={form.operationId} onChange={(event) => setForm((current) => ({ ...current, operationId: event.target.value }))} placeholder="operation id" />
+                    <Input value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} placeholder="notes" />
+                  </div>
+                ) : (
+                  <div className="space-y-3 rounded-[var(--radius-lg)] border border-border/60 bg-background/55 p-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Select value={form.buildSystem || (buildSystems[0] ?? 'manual')} onValueChange={(next) => setForm((current) => ({ ...current, buildSystem: next }))}>
+                        <SelectTrigger><SelectValue placeholder="build system" /></SelectTrigger>
+                        <SelectContent>{(buildSystems.length ? buildSystems : ['manual']).map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Select value={form.compiler} onValueChange={(next) => setForm((current) => ({ ...current, compiler: next }))}>
+                        <SelectTrigger><SelectValue placeholder="compiler wrapper" /></SelectTrigger>
+                        <SelectContent>{(probe?.compiler_catalog ?? []).map((item) => <SelectItem key={item.compiler_id} value={item.compiler_id}>{item.compiler_id}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Select value={form.sanitizerMode} onValueChange={(next) => setForm((current) => ({ ...current, sanitizerMode: next }))}>
+                        <SelectTrigger><SelectValue placeholder="sanitizer" /></SelectTrigger>
+                        <SelectContent>{sanitizerModes.map((item) => <SelectItem key={item.mode} value={item.mode}>{item.label}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Select value={form.buildType} onValueChange={(next) => setForm((current) => ({ ...current, buildType: next }))}>
+                        <SelectTrigger><SelectValue placeholder="build type" /></SelectTrigger>
+                        <SelectContent>{buildTypeOptions.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Input value={form.parallelism} onChange={(event) => setForm((current) => ({ ...current, parallelism: event.target.value }))} placeholder="parallelism" />
+                      <Input value={form.generator} onChange={(event) => setForm((current) => ({ ...current, generator: event.target.value }))} placeholder="generator (optional)" />
+                      <Input value={form.buildTarget} onChange={(event) => setForm((current) => ({ ...current, buildTarget: event.target.value }))} placeholder="build target (optional)" />
+                      <div className="flex items-center justify-between rounded-[var(--radius-lg)] border border-border/60 bg-background px-3 py-2.5">
+                        <span className="text-sm">LLM 辅助构建建议</span>
+                        <Switch checked={form.useLlmBuildAssist} onCheckedChange={(checked) => setForm((current) => ({ ...current, useLlmBuildAssist: checked }))} />
+                      </div>
+                      <Textarea className="min-h-[84px]" value={form.extraCFlags} onChange={(event) => setForm((current) => ({ ...current, extraCFlags: event.target.value }))} placeholder='extra CFLAGS' />
+                      <Textarea className="min-h-[84px]" value={form.extraCxxFlags} onChange={(event) => setForm((current) => ({ ...current, extraCxxFlags: event.target.value }))} placeholder='extra CXXFLAGS' />
+                      <Textarea className="md:col-span-2 min-h-[84px]" value={form.extraLdFlags} onChange={(event) => setForm((current) => ({ ...current, extraLdFlags: event.target.value }))} placeholder='extra LDFLAGS' />
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <Button type="button" variant="secondary" onClick={() => buildPlanMutation.mutate()} disabled={buildPlanMutation.isPending || !probe?.source_ref}>
+                        <Hammer className="size-4" />
+                        {buildPlanMutation.isPending ? '生成中...' : '生成 BuildPlan'}
+                      </Button>
+                      <Button type="button" onClick={() => buildRunMutation.mutate()} disabled={buildRunMutation.isPending || !buildPlanMutation.data?.plan_id}>
+                        <TerminalSquare className="size-4" />
+                        {buildRunMutation.isPending ? '构建中...' : '运行 BuildPlan'}
+                      </Button>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Select value={form.selectedSuggestionId || 'none'} onValueChange={(next) => setForm((current) => ({ ...current, selectedSuggestionId: next === 'none' ? '' : next }))}>
+                        <SelectTrigger><SelectValue placeholder="建议命令" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">不锁定建议命令</SelectItem>
+                          {primaryBuildSuggestions.map((item) => <SelectItem key={item.suggestion_id} value={item.suggestion_id}>{item.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <p className="rounded-[var(--radius-lg)] border border-border/60 bg-background px-3 py-2 text-xs text-muted-foreground">
+                        如果无法可靠反推出完整 build 链，系统会在右侧展示可复制的建议命令，而不是伪造可运行配置。
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="card-surface">
+              <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><GitBranchPlus className="size-4.5" /> 闭环动作</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Button type="button" variant="secondary" onClick={() => predictProfileMutation.mutate()} disabled={predictProfileMutation.isPending || form.executionMode === 'build'}>
+                    <Wrench className="size-4" />
+                    {predictProfileMutation.isPending ? '生成中...' : '生成 LaunchProfile 草案'}
+                  </Button>
+                  <Button onClick={submitJob} disabled={createMutation.isPending || !canSubmitJob}>
+                    {createMutation.isPending ? '提交中...' : form.dryRun ? '执行校验' : '启动任务'}
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  实时任务建议：构建辅助 → 选择 target → 生成 LaunchProfile → 正式启动。辅助工具模式如果与 Runner 不兼容，会自动退化为右侧可复制命令建议。
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <JobLaunchPreviewPanel
+            payload={payload}
+            warnings={validationWarnings}
+            profileSummary={profileSummary}
+            commandBlocks={commandBlocks}
+            assistantNotes={assistantNotes}
+          />
+        </div>
+      ) : null}
+
+      {tab === "list" ? (
+        <div className="space-y-4">
+          <JobsQueryBar value={query} onChange={(next) => { setQuery(next); dockLog("info", "job", "job filters updated", next); }} protocolOptions={protocolOptions} nodeOptions={nodeOptions} schedulerOptions={schedulerListOptions} />
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_24rem]">
+            <JobRowList jobs={jobs} />
+            <JobsResultSummaryPanel jobs={jobs} summary={summary} />
+          </div>
+        </div>
+      ) : null}
+
+      {tab === "monitor" ? (
+        <div className="space-y-4">
+          <div className="card-surface rounded-[var(--radius-xl)] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+              <p className="text-sm font-medium">运行态总览</p>
+              <p className="text-sm text-muted-foreground">主趋势图与全字段面板直接消费后端 `metrics/history` 和 `fuzzer_stats`；运行参数回显来自后端最终启动 command 解析。</p>
+              </div>
+              <Button variant="secondary" onClick={() => { void monitorQuery.refetch(); void summaryQuery.refetch(); void monitorMetricsHistoryQuery.refetch(); }}>
+                <RefreshCw className="size-4" /> 刷新
+              </Button>
+            </div>
+          </div>
+          <JobsMonitoringOverview data={monitorQuery.data} selectedJobId={selectedMonitorJobId} selectedJobHistory={selectedMonitorJobHistory} onSelectJob={(jobId) => { setSelectedMonitorJobId(jobId); dockLog("info", "job", `inspect monitor job ${jobId}`); }} />
+        </div>
+      ) : null}
     </div>
   );
 }

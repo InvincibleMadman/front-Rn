@@ -1,375 +1,208 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Search, ShieldAlert } from "lucide-react";
-import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Activity, GitBranch, Link2, ShieldAlert } from "lucide-react";
+import { PageHeroBoard } from "@/components/layout/page-hero-board";
 import { ApiErrorReporter } from "@/components/common/api-error-alert";
-import { JsonViewer } from "@/components/common/json-viewer";
-import { StatusBadge } from "@/components/common/status-badge";
-import { SummaryCard } from "@/components/common/summary-card";
-import { EchartsBase, useEchartsPalette, type ChartOption } from "@/components/charts/echarts-base";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/common/empty-state";
+import { dockLog } from "@/components/layout/dock";
 import { protocolsApi } from "@/lib/api/services/protocols";
 import { vulnHistoryApi } from "@/lib/api/services/vuln-history";
-import { debugApi } from "@/lib/api/services/debug";
-import { jobsApi } from "@/lib/api/services/jobs";
-import { formatDateTime } from "@/lib/utils/format";
-import type { VulnHistoryRecord } from "@/types/api/vuln-history";
+import { VulnStatusBoard } from "@/features/vuln-history/components/vuln-status-board";
+import { VulnQueryBar } from "@/features/vuln-history/components/vuln-query-bar";
+import { VulnTypeDistributionChart } from "@/features/vuln-history/components/vuln-type-distribution-chart";
+import { VulnTrendChart } from "@/features/vuln-history/components/vuln-trend-chart";
+import { VulnRecordList } from "@/features/vuln-history/components/vuln-record-list";
+import { VulnEvidencePanel } from "@/features/vuln-history/components/vuln-evidence-panel";
+import type { VulnHistoryRecord, VulnQuery, VulnSummary } from "@/types/api/vuln-history";
 
-const coarseTypeOptions = [
-  ["all", "全部类型"],
-  ["memory-corruption", "内存破坏"],
-  ["bounds-check", "边界检查"],
-  ["null-deref", "空指针解引用"],
-  ["use-after-free", "释放后使用"],
-  ["integer-issue", "整数问题"],
-  ["parser-state", "解析状态异常"],
-  ["auth-logic", "认证逻辑"],
-  ["resource-exhaustion", "资源耗尽"],
-  ["protocol-state-machine", "协议状态机"],
-  ["unknown", "未知"],
-] as const;
-
-function recordId(record: VulnHistoryRecord): string {
-  return record.record_id ?? record.id ?? record.debug_session_id ?? record.artifact_id ?? "";
+function recordKey(record?: VulnHistoryRecord | null): string | undefined {
+  if (!record) return undefined;
+  return record.record_id ?? record.id ?? record.debug_session_id ?? record.artifact_id ?? `${record.protocol}-${record.title}`;
 }
 
-function field(record: VulnHistoryRecord, name: keyof VulnHistoryRecord, fallback = "-"): string {
-  const value = record[name];
-  return value === undefined || value === null || value === "" ? fallback : String(value);
-}
-
-function haystack(record: VulnHistoryRecord): string {
-  return [
-    record.title,
-    record.root_cause,
-    record.stack_summary,
-    record.file,
-    record.file_path,
-    record.function,
-    record.function_name,
-    record.cwe,
-    record.crash_signature,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function severityFromRecord(record: VulnHistoryRecord): "danger" | "orange" | "violet" | "blue" {
-  const confidence = Number(record.confidence ?? 0);
-  if (confidence >= 0.85) return "danger";
-  if (confidence >= 0.65) return "orange";
-  if ((record.coarse_type ?? "").includes("protocol")) return "violet";
-  return "blue";
-}
-
-function donutOption(items: Array<{ name: string; value: number }>, palette: string[]): ChartOption {
-  return {
-    color: palette,
-    tooltip: { trigger: "item" },
-    series: [
-      {
-        type: "pie",
-        radius: ["54%", "74%"],
-        center: ["50%", "50%"],
-        label: { show: true, formatter: "{b}: {c}" },
-        data: items,
-      },
-    ],
-  };
+function statusPercent(value: number, total: number): string {
+  if (total <= 0) return "0%";
+  return `${Math.round((value / total) * 100)}%`;
 }
 
 export function VulnHistoryView(): JSX.Element {
-  const palette = useEchartsPalette();
+  const [mode, setMode] = useState<"global" | "protocol">("global");
   const [protocol, setProtocol] = useState("");
-  const [coarseType, setCoarseType] = useState("all");
-  const [keyword, setKeyword] = useState("");
-  const [cwe, setCwe] = useState("");
-  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
-  const [selected, setSelected] = useState<VulnHistoryRecord | null>(null);
+  const [query, setQuery] = useState<VulnQuery>({ limit: 100, sort: "updated_at", order: "desc" });
+  const [selected, setSelected] = useState<VulnHistoryRecord | undefined>(undefined);
+
+  useEffect(() => {
+    dockLog("info", "vuln", "entered vulnerability center", { mode });
+    return () => dockLog("info", "vuln", "left vulnerability center");
+  }, []);
 
   const protocolsQuery = useQuery({ queryKey: ["protocols"], queryFn: protocolsApi.listProtocols, retry: 0 });
-  const historyQuery = useQuery({
-    queryKey: ["vuln-history", protocol, coarseType],
-    queryFn: () => vulnHistoryApi.records(protocol, { coarse_type: coarseType === "all" ? undefined : coarseType, keyword, cwe, limit: 100, offset: 0 }),
-    enabled: Boolean(protocol),
-    retry: 0,
-  });
+  const effectiveProtocol = mode === "protocol" ? protocol : undefined;
+  const missingProtocol = mode === "protocol" && !protocol;
+
   const summaryQuery = useQuery({
-    queryKey: ["vuln-summary", protocol],
-    queryFn: () => vulnHistoryApi.summary(protocol),
-    enabled: Boolean(protocol),
+    queryKey: ["vuln-summary", effectiveProtocol],
+    queryFn: () => vulnHistoryApi.getSummary(effectiveProtocol ? { protocol: effectiveProtocol } : {}),
     retry: 0,
+    enabled: !missingProtocol,
   });
-  const debugSummaryQuery = useQuery({
-    queryKey: ["debug-summary", protocol],
-    queryFn: () => debugApi.getProtocolSummary(protocol),
-    enabled: Boolean(protocol),
+  const trendsQuery = useQuery({
+    queryKey: ["vuln-trends", effectiveProtocol],
+    queryFn: () => vulnHistoryApi.getTrends(effectiveProtocol ? { protocol: effectiveProtocol } : {}),
     retry: 0,
+    enabled: !missingProtocol,
   });
-  const jobsSummaryQuery = useQuery({
-    queryKey: ["jobs-summary-for-vuln"],
-    queryFn: jobsApi.requestSummary,
+  const recordsQuery = useQuery({
+    queryKey: ["vuln-records", effectiveProtocol, query],
+    queryFn: () => vulnHistoryApi.records({ ...query, protocol: effectiveProtocol }),
     retry: 0,
-  });
-  const detailQuery = useQuery({
-    queryKey: ["vuln-history-detail", protocol, recordId(selected ?? {})],
-    queryFn: () => vulnHistoryApi.get(protocol, recordId(selected ?? {})),
-    enabled: Boolean(protocol && selected && recordId(selected)),
-    retry: 0,
+    enabled: !missingProtocol,
   });
 
-  const records = useMemo(() => {
-    const base = historyQuery.data?.items ?? historyQuery.data?.records ?? [];
-    return base
-      .sort((a, b) => {
-        const ad = new Date(a.created_at ?? 0).getTime();
-        const bd = new Date(b.created_at ?? 0).getTime();
-        return sortOrder === "desc" ? bd - ad : ad - bd;
+  const records = useMemo(() => (recordsQuery.data?.items ?? recordsQuery.data?.records ?? []), [recordsQuery.data]);
+  const summary = summaryQuery.data;
+
+  useEffect(() => {
+    if (records.length) {
+      setSelected((current) => {
+        const currentId = recordKey(current);
+        const matched = records.find((item) => recordKey(item) === currentId);
+        return matched ?? records[0];
       });
-  }, [historyQuery.data, sortOrder]);
-
-  const detail = detailQuery.data ?? selected;
-
-  const stats = useMemo(() => {
-    const total = records.length;
-    const highConfidence = records.filter((item) => Number(item.confidence ?? 0) >= 0.8).length;
-    const protocolMachine = records.filter((item) => item.coarse_type === "protocol-state-machine").length;
-    const memoryRelated = records.filter((item) => item.coarse_type === "memory-corruption").length;
-    return { total, highConfidence, protocolMachine, memoryRelated };
+    } else {
+      setSelected(undefined);
+    }
   }, [records]);
 
-  const coarseTypeDonut = useMemo(
-    () =>
-      Object.entries((summaryQuery.data?.by_coarse_type as Record<string, number> | undefined) ?? {}).map(([name, value]) => ({ name, value })),
-    [summaryQuery.data],
-  );
-  const cweDonut = useMemo(
-    () => Object.entries((summaryQuery.data?.by_cwe as Record<string, number> | undefined) ?? {}).slice(0, 8).map(([name, value]) => ({ name, value })),
-    [summaryQuery.data],
-  );
+  const closureRows = useMemo(() => {
+    const closure = summary?.closure_status ?? {};
+    const total = Object.values(closure).reduce((acc, item) => acc + Number(item ?? 0), 0);
+    return Object.entries(closure).sort((a, b) => Number(b[1]) - Number(a[1]));
+  }, [summary]);
+
+  const selectionHint = mode === "protocol" ? `单协议：${protocol || "未选择协议"}` : "全局：跨全部协议汇总";
 
   return (
-    <div className="space-y-6">
-      <ApiErrorReporter error={protocolsQuery.error} title="协议列表加载失败" source="offline" />
-      <ApiErrorReporter error={historyQuery.error} title="漏洞历史加载失败" source="offline" />
-      <ApiErrorReporter error={detailQuery.error} title="漏洞详情加载失败" source="offline" />
-      <PageHeader
-        eyebrow="漏洞中心"
-        title="漏洞中心"
-        description="复用原漏洞历史与调试归档逻辑，补充协议级汇总、类型分布、Crash/Risk/GDB 关联信息。"
+    <div className="space-y-5">
+      <ApiErrorReporter error={protocolsQuery.error} title="加载协议列表失败" source="vuln" />
+      <ApiErrorReporter error={summaryQuery.error} title="加载漏洞汇总失败" source="vuln" />
+      <ApiErrorReporter error={trendsQuery.error} title="加载漏洞趋势失败" source="vuln" />
+      <ApiErrorReporter error={recordsQuery.error} title="加载漏洞记录失败" source="vuln" />
+
+      <PageHeroBoard
+          eyebrow="V U L N E R A B I L I T Y · O P S"
+          title="漏洞中心"
+          description="按安全运营页组织：顶部 sticky 检索，中部类型分布 / 趋势 / 闭环状态，下方左记录列表右证据详情；全局与单协议必须真实区分。"
+          board={<VulnStatusBoard summary={summary} />}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard title="记录总数" value={String(stats.total)} hint="当前协议范围" statusColor="blue" />
-        <SummaryCard title="高置信度" value={String(stats.highConfidence)} hint="置信度 >= 0.8" statusColor="danger" />
-        <SummaryCard title="协议状态机" value={String(stats.protocolMachine)} hint="protocol-state-machine" statusColor="violet" />
-        <SummaryCard title="内存相关" value={String(stats.memoryRelated)} hint="memory-corruption" statusColor="orange" />
-      </div>
+      <VulnQueryBar
+        mode={mode}
+        protocol={protocol}
+        protocolOptions={protocolsQuery.data ?? []}
+        query={query}
+        onModeChange={(next) => {
+          setMode(next);
+          setSelected(undefined);
+          dockLog("info", "vuln", "vulnerability mode changed", { mode: next });
+        }}
+        onProtocolChange={(next) => {
+          setProtocol(next);
+          setSelected(undefined);
+          dockLog("info", "vuln", "vulnerability protocol changed", { protocol: next || "all" });
+        }}
+        onQueryChange={(next) => {
+          setQuery(next);
+          setSelected(undefined);
+          dockLog("info", "vuln", "vulnerability filters updated", next);
+        }}
+      />
 
-      <div className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>漏洞类型分布</CardTitle>
-            <CardDescription>协议级 `coarse_type` 与 `CWE` 统计，来自标准化 vulnerabilities summary。</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 lg:grid-cols-2">
-            <EchartsBase option={donutOption(coarseTypeDonut, palette)} height={300} />
-            <EchartsBase option={donutOption(cweDonut, palette)} height={300} />
+      {missingProtocol ? (
+        <Card className="card-surface">
+          <CardContent className="p-5">
+            <EmptyState title="单协议模式尚未选择协议" description="你要求单协议模式必须可选协议并真实联动数据；请选择协议后再查看 summary、趋势、分布与证据详情。" />
           </CardContent>
         </Card>
+      ) : (
+        <>
+          <div className="grid gap-4 xl:grid-cols-[1.15fr_1.1fr_0.8fr]">
+            <Card className="card-surface overflow-hidden">
+              <CardHeader className="border-b border-border/50 pb-3">
+                <CardTitle className="flex items-center gap-2 text-base"><GitBranch className="size-4.5" /> 类型分布</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-5">
+                <VulnTypeDistributionChart summary={summary} />
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>Crash / Risk / GDB 汇总</CardTitle>
-            <CardDescription>保持 GDB 独立页，同时将其 summary 纳入漏洞中心。</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-[var(--radius-lg)] border border-border/60 bg-background/50 p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Jobs</p>
-              <p className="mt-2 text-sm">运行中 {String(jobsSummaryQuery.data?.running ?? 0)}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Crash {String(jobsSummaryQuery.data?.crash_count ?? 0)} / Hang {String(jobsSummaryQuery.data?.hang_count ?? 0)}</p>
-            </div>
-            <div className="rounded-[var(--radius-lg)] border border-border/60 bg-background/50 p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">GDB</p>
-              <p className="mt-2 text-sm">会话 {String(debugSummaryQuery.data?.total ?? 0)}</p>
-              <p className="mt-1 text-xs text-muted-foreground">最近会话 {String(debugSummaryQuery.data?.recent_sessions?.length ?? 0)}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            <Card className="card-surface overflow-hidden">
+              <CardHeader className="border-b border-border/50 pb-3">
+                <CardTitle className="flex items-center gap-2 text-base"><Activity className="size-4.5" /> 趋势图</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-5">
+                <VulnTrendChart data={trendsQuery.data} />
+              </CardContent>
+            </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[0.72fr_1.08fr_0.9fr]">
-        <Card className="overflow-hidden">
-          <CardHeader className="border-b border-border/50">
-            <CardTitle className="text-base">筛选条件</CardTitle>
-            <CardDescription>协议、类型、关键词、CWE 与排序集中放在左侧，保持紧凑，不铺满整页。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 p-5">
-            <Input list="protocols-list" value={protocol} onChange={(event) => setProtocol(event.target.value)} placeholder="输入协议名" />
-            <datalist id="protocols-list">
-              {(protocolsQuery.data ?? [""]).map((item) => (
-                <option key={item} value={item} />
-              ))}
-            </datalist>
-
-            <Select value={coarseType} onValueChange={setCoarseType}>
-              <SelectTrigger>
-                <SelectValue placeholder="选择粗粒度类型" />
-              </SelectTrigger>
-              <SelectContent>
-                {coarseTypeOptions.map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
+            <Card className="card-surface">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base"><ShieldAlert className="size-4.5" /> 闭环状态</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="rounded-[var(--radius-lg)] border border-border/60 bg-card p-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">当前视角</p>
+                  <p className="mt-2 font-medium">{selectionHint}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{summary?.mode === "protocol" ? "协议内明细与证据联动" : "跨协议运营总览"}</p>
+                </div>
+                {closureRows.map(([key, value]) => (
+                  <div key={key} className="rounded-[var(--radius-lg)] border border-border/60 bg-card px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">{key}</span>
+                      <span className="font-semibold">{String(value)}</span>
+                    </div>
+                    <div className="mt-2 h-1.5 rounded-full bg-muted/80">
+                      <div className="h-1.5 rounded-full bg-primary" style={{ width: statusPercent(Number(value), summary?.total ?? 0) }} />
+                    </div>
+                  </div>
                 ))}
-              </SelectContent>
-            </Select>
-
-            <div className="relative">
-              <Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
-              <Input className="pl-9" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="标题 / 根因 / 函数名" />
-            </div>
-
-            <Input value={cwe} onChange={(event) => setCwe(event.target.value)} placeholder="输入 CWE，例如 CWE-125" />
-
-            <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as "desc" | "asc")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="desc">最新优先</SelectItem>
-                <SelectItem value="asc">最早优先</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div className="rounded-[var(--radius-xl)] border border-[hsl(var(--accent-pink)/0.18)] bg-[hsl(var(--accent-pink)/0.08)] px-4 py-3 text-sm">
-              <div className="flex items-center gap-2 font-medium">
-                <ShieldAlert className="size-4 text-[hsl(var(--accent-pink))]" />
-                历史归档说明
-              </div>
-              <p className="mt-2 text-muted-foreground">
-                页面仅展示后端返回的真实归档结果，不使用 mock 数据掩盖接口失败。
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden">
-          <CardHeader className="border-b border-border/50">
-            <CardTitle className="text-base">历史记录</CardTitle>
-            <CardDescription>Crash / Risk / GDB 关联表。选中任一记录后在右侧查看证据与推理。</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-auto">
-              <Table>
-                <TableHeader className="table-header-row sticky top-0 z-10">
-                    <TableRow>
-                      <TableHead>标题</TableHead>
-                      <TableHead>类型</TableHead>
-                      <TableHead>CWE</TableHead>
-                      <TableHead>关联</TableHead>
-                      <TableHead>位置</TableHead>
-                      <TableHead>创建时间</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {records.length ? (
-                    records.map((record, index) => (
-                      <TableRow key={recordId(record) || index} className="cursor-pointer" onClick={() => setSelected(record)}>
-                        <TableCell>
-                          <div className="max-w-[20rem]">
-                            <p className="truncate font-medium">{record.title ?? recordId(record) ?? "未命名"}</p>
-                            <p className="truncate text-xs text-muted-foreground">{record.crash_signature}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <StatusBadge status={record.coarse_type ?? "unknown"} />
-                            <p className="text-xs text-muted-foreground">{record.vuln_type ?? "-"}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>{record.cwe ?? "-"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          <p>{record.debug_session_id ? "GDB 已关联" : "GDB 待补"}</p>
-                          <p>{record.artifact_id ? "Crash 已归档" : "Crash 待补"}</p>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          <p className="max-w-[14rem] truncate">{record.file_path ?? record.file}</p>
-                          <p>{record.function_name ?? record.function}:{record.line ?? "-"}</p>
-                        </TableCell>
-                        <TableCell>{formatDateTime(record.created_at)}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="py-16 text-center text-muted-foreground">
-                        {protocol ? "没有匹配的归档记录。" : "请先选择协议，再加载归档结果。"}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden">
-          <CardHeader className="border-b border-border/50">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="size-4 text-[hsl(var(--accent-orange))]" />
-              证据详情
-            </CardTitle>
-            <CardDescription>右侧集中展示根因、定位、修复建议与会话关联，原始结构折叠到详情展开区。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 p-5">
-            {!detail ? (
-              <p className="text-sm text-muted-foreground">请选择一条记录查看详情。</p>
-            ) : (
-              <>
-                <div className={`summary-card-shell ${severityFromRecord(detail) === "danger" ? "summary-card-danger" : severityFromRecord(detail) === "orange" ? "summary-card-orange" : severityFromRecord(detail) === "violet" ? "summary-card-violet" : "summary-card-blue"} p-5`}>
-                  <div className="summary-card-orb" />
-                  <div className="relative">
-                    <p className="summary-card-title text-xs uppercase tracking-[0.18em]">根因</p>
-                    <p className="summary-card-value mt-3 text-base font-semibold">{field(detail, "root_cause")}</p>
-                    <p className="summary-card-copy mt-3 text-sm">{field(detail, "direct_cause")}</p>
-                  </div>
+                {!closureRows.length ? <div className="rounded-[var(--radius-lg)] border border-dashed border-border/70 bg-card px-4 py-8 text-center text-sm text-muted-foreground">当前没有闭环状态统计。</div> : null}
+                <div className="rounded-[var(--radius-lg)] border border-border/60 bg-card p-3 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 text-foreground"><Link2 className="size-4" /> 关联摘要</div>
+                  <p className="mt-2">GDB：{summary?.linked_debug ?? 0} · Crash：{summary?.linked_crash ?? 0} · 未关联：{summary?.unlinked_records ?? 0}</p>
                 </div>
+              </CardContent>
+            </Card>
+          </div>
 
-                <div className="console-data-card p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">定位</p>
-                  <p className="mt-2 text-sm font-medium text-foreground">{field(detail, "function_name")}</p>
-                  <p className="mt-1 break-all text-xs text-muted-foreground">{field(detail, "file_path", field(detail, "file"))}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">行号 {field(detail, "line")}</p>
+          <div className="grid gap-4 xl:grid-cols-[1.15fr_1.1fr_0.8fr] xl:items-start">
+            <Card className="card-surface xl:col-span-2">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">漏洞记录</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="rounded-[var(--radius-lg)] border border-border/60 bg-card px-4 py-3 text-sm text-muted-foreground">
+                  当前记录 {records.length} 条，{mode === "protocol" ? `已按协议 ${protocol} 过滤` : "展示跨协议汇总记录"}。
                 </div>
-
-                <div className="console-data-card p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">PoC / 修复建议</p>
-                  <p className="mt-2 text-sm text-foreground">{field(detail, "poc_concept")}</p>
-                  <p className="mt-3 text-sm text-muted-foreground">{field(detail, "fix_suggestion")}</p>
-                </div>
-
-                <div className="console-data-card p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">会话关联</p>
-                  <p className="mt-2 text-sm text-foreground">{field(detail, "debug_session_id")}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">产物 {field(detail, "artifact_id")}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">置信度 {field(detail, "confidence")}</p>
-                </div>
-
-                <details className="console-data-card p-4">
-                  <summary className="cursor-pointer text-sm font-medium">查看原始详情</summary>
-                  <div className="mt-3">
-                    <JsonViewer data={detail} compact />
-                  </div>
-                </details>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                {records.length ? (
+                  <VulnRecordList
+                    records={records}
+                    selectedId={recordKey(selected)}
+                    onSelect={(record) => {
+                      setSelected(record);
+                      dockLog("info", "vuln", "selected vulnerability record", { record_id: recordKey(record), protocol: record.protocol, coarse_type: record.coarse_type });
+                    }}
+                  />
+                ) : (
+                  <EmptyState title="暂无漏洞记录" description="切换模式、协议或放宽筛选条件后再查看。" />
+                )}
+              </CardContent>
+            </Card>
+            <VulnEvidencePanel record={selected} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

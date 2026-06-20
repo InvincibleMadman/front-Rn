@@ -1,27 +1,30 @@
 import { apiClient } from "@/lib/api/client";
-import type { VulnHistoryListResponse, VulnHistoryRecord } from "@/types/api/vuln-history";
+import type { VulnHistoryListResponse, VulnHistoryRecord, VulnQuery, VulnSummary, VulnTrendResponse } from "@/types/api/vuln-history";
 
-function qs(params: { coarse_type?: string; limit?: number; offset?: number }): string {
+function qs(params: Record<string, unknown>): string {
   const query = new URLSearchParams();
-  (Object.entries(params) as Array<[string, string | number | undefined]>).forEach(([key, value]) => {
-    if (value !== undefined && value !== "") query.set(key, String(value));
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
   });
   const text = query.toString();
   return text ? `?${text}` : "";
 }
 
 export const vulnHistoryApi = {
-  summary: async (protocol: string): Promise<Record<string, unknown>> => {
-    const response = await apiClient.requestEnvelope<Record<string, unknown>>(`/api/v1/protocols/${encodeURIComponent(protocol)}/vulnerabilities/summary`);
+  getSummary: async (params: { protocol?: string } = {}): Promise<VulnSummary> => {
+    const response = await apiClient.requestEnvelope<VulnSummary>(`/api/v1/vulnerabilities/summary${qs(params)}`);
     return response.data;
   },
-  records: async (
-    protocol: string,
-    params: { coarse_type?: string; keyword?: string; cwe?: string; limit?: number; offset?: number } = {},
-  ): Promise<VulnHistoryListResponse> => {
-    const response = await apiClient.requestEnvelope<VulnHistoryListResponse>(
-      `/api/v1/protocols/${encodeURIComponent(protocol)}/vulnerabilities/records${qs(params)}`,
-    );
+  getTrends: async (params: { protocol?: string } = {}): Promise<VulnTrendResponse> => {
+    const response = await apiClient.requestEnvelope<VulnTrendResponse>(`/api/v1/vulnerabilities/trends${qs(params)}`);
+    return response.data;
+  },
+  records: async (params: VulnQuery = {}): Promise<VulnHistoryListResponse> => {
+    const response = await apiClient.requestEnvelope<VulnHistoryListResponse>(`/api/v1/vulnerabilities/records${qs(params)}`);
+    return response.data;
+  },
+  summary: async (protocol: string): Promise<Record<string, unknown>> => {
+    const response = await apiClient.requestEnvelope<Record<string, unknown>>(`/api/v1/protocols/${encodeURIComponent(protocol)}/vulnerabilities/summary`);
     return response.data;
   },
   list: async (protocol: string, params: { coarse_type?: string; limit?: number; offset?: number } = {}): Promise<VulnHistoryListResponse> => {

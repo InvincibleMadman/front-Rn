@@ -1,8 +1,18 @@
 import { apiClient } from "@/lib/api/client";
 import { resolveApiUrl, resolveWsUrl } from "@/lib/api/url";
-import type { AnalysisResult, ArtifactRecord, EventMessage, Job, JobCreateRequest, LogsTailResponse, Metrics } from "@/types/api/jobs";
-
-/* ── helpers ── */
+import type {
+  AnalysisResult,
+  ArtifactRecord,
+  EventMessage,
+  Job,
+  JobCreateRequest,
+  JobRuntimeResponse,
+  JobsListQuery,
+  JobsMonitorOverview,
+  JobsSummary,
+  LogsTailResponse,
+  Metrics,
+} from "@/types/api/jobs";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -34,7 +44,15 @@ function numberField(record: Record<string, unknown>, key: string): number | und
   return numberFrom(record[key]);
 }
 
-/* ── normalizers ── */
+function withQuery(path: string, query: Record<string, unknown>): string {
+  const search = new URLSearchParams();
+  Object.entries(query).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    search.set(key, String(value));
+  });
+  const text = search.toString();
+  return text ? `${path}?${text}` : path;
+}
 
 function normalizeMetrics(metrics: Metrics | Record<string, unknown> | null | undefined): Metrics | null {
   if (!metrics || !isRecord(metrics)) return null;
@@ -62,17 +80,9 @@ function normalizeMetrics(metrics: Metrics | Record<string, unknown> | null | un
   return normalized;
 }
 
-/**
- * 后端 JobRecord 结构：
- * { job_id, protocol, status, pid, request: { cwd, target_cmd, afl_path, ... }, output_dir, log_path, command, metrics, ... }
- *
- * 前端 normalizeJob 从 request.* 字段 fallback 提取关键信息。
- */
 function normalizeJob(job: Job): Job {
   const request = isRecord(job.request) ? job.request : {};
   const normalized: Job = { ...job };
-
-  // 从 request fallback 提取常用字段
   normalized.protocol = stringFrom(job.protocol) ?? stringField(request, "protocol");
   normalized.cwd = stringFrom(job.cwd) ?? stringField(request, "cwd");
   normalized.target_cmd = asStringArray(job.target_cmd) ?? asStringArray(request.target_cmd);
@@ -82,17 +92,10 @@ function normalizeJob(job: Job): Job {
   normalized.timeout_sec = numberField(job as unknown as Record<string, unknown>, "timeout_sec") ?? numberField(request, "timeout_sec");
   normalized.dry_run = typeof job.dry_run === "boolean" ? job.dry_run : typeof request.dry_run === "boolean" ? (request.dry_run as boolean) : undefined;
   normalized.debug = isRecord(job.debug) ? job.debug as Job["debug"] : isRecord(request.debug) ? request.debug as Job["debug"] : undefined;
-
-  // pid: 后端只有 pid: int | null，前端兼容 pids 数组
   normalized.pids = Array.isArray(job.pids) ? job.pids : typeof job.pid === "number" ? [job.pid] : [];
-
-  // metrics: 后端 metrics 是 dict（可能为空），last_metrics 不存在
   const rawMetrics = isRecord(job.metrics) ? job.metrics : null;
   const lastMetrics = normalizeMetrics(rawMetrics);
-  if (lastMetrics) {
-    normalized.last_metrics = lastMetrics;
-  }
-
+  if (lastMetrics) normalized.last_metrics = lastMetrics;
   return normalized;
 }
 
@@ -106,8 +109,6 @@ function normalizeArtifact(artifact: ArtifactRecord): ArtifactRecord {
   return normalized;
 }
 
-/* ── API methods ── */
-
 export const jobsApi = {
   createJob: async (payload: JobCreateRequest): Promise<Job> => {
     const response = await apiClient.requestEnvelope<Job>("/api/v1/jobs", {
@@ -117,17 +118,32 @@ export const jobsApi = {
     return normalizeJob(response.data);
   },
 
-  listJobs: async (): Promise<Job[]> => {
-    // 后端返回 { ok, message, data: { items: JobRecord[] } }
-    const response = await apiClient.requestEnvelope<{ items?: Job[] } | Job[]>("/api/v1/jobs");
+  listJobs: async (query: JobsListQuery = {}): Promise<Job[]> => {
+    const response = await apiClient.requestEnvelope<{ items?: Job[] } | Job[]>(withQuery("/api/v1/jobs", query));
     const data = response.data;
     const items = Array.isArray(data) ? data : (data.items ?? []);
     return items.map(normalizeJob);
   },
 
-  requestSummary: async (): Promise<Record<string, unknown>> => {
-    const response = await apiClient.requestEnvelope<Record<string, unknown>>("/api/v1/jobs/summary");
+  requestSummary: async (query: JobsListQuery = {}): Promise<JobsSummary> => {
+    const response = await apiClient.requestEnvelope<JobsSummary>(withQuery("/api/v1/jobs/summary", query));
     return response.data;
+  },
+
+  getMonitorOverview: async (query: { job_id?: string; status?: string; protocol?: string } = {}): Promise<JobsMonitorOverview> => {
+    const response = await apiClient.requestEnvelope<JobsMonitorOverview>(withQuery("/api/v1/jobs/monitor/overview", query));
+    return {
+      ...response.data,
+      selected_job_metrics: normalizeMetrics(response.data.selected_job_metrics ?? null),
+    } as JobsMonitorOverview;
+  },
+
+  getRuntime: async (jobId: string): Promise<JobRuntimeResponse> => {
+    const response = await apiClient.requestEnvelope<JobRuntimeResponse>(`/api/v1/jobs/${encodeURIComponent(jobId)}/runtime`);
+    return {
+      ...response.data,
+      metrics: normalizeMetrics(response.data.metrics ?? null),
+    };
   },
 
   getJob: async (jobId: string): Promise<Job> => {
@@ -141,13 +157,11 @@ export const jobsApi = {
   },
 
   getMetrics: async (jobId: string): Promise<Metrics | null> => {
-    // 后端返回 dict（可能为空 {}）
     const response = await apiClient.requestEnvelope<Record<string, unknown>>(`/api/v1/jobs/${encodeURIComponent(jobId)}/metrics`);
     return normalizeMetrics(response.data);
   },
 
   getMetricsHistory: async (jobId: string, limit = 200): Promise<Metrics[]> => {
-    // 后端直接返回 raw array（ApiResponse data 层是 array）
     const response = await apiClient.requestEnvelope<Metrics[] | { items?: Metrics[]; points?: Metrics[] }>(`/api/v1/jobs/${encodeURIComponent(jobId)}/metrics/history?limit=${limit}`);
     const data = response.data;
     const items = Array.isArray(data) ? data : (data.points ?? data.items ?? []);
@@ -155,7 +169,6 @@ export const jobsApi = {
   },
 
   listArtifacts: async (jobId: string): Promise<ArtifactRecord[]> => {
-    // 后端返回 { ok, message, data: { job_id, items: ArtifactRecord[] } }
     const response = await apiClient.requestEnvelope<{ job_id?: string; items?: ArtifactRecord[] }>(`/api/v1/jobs/${encodeURIComponent(jobId)}/artifacts`);
     return (response.data.items ?? []).map(normalizeArtifact);
   },
@@ -175,10 +188,6 @@ export const jobsApi = {
     return response.data;
   },
 
-  /**
-   * 后端返回 { ok, message, data: { lines: string[], status: string, next_seq: number } }
-   * 前端返回完整 LogsTailResponse，不再只返回 string[]。
-   */
   tailLogs: async (jobId: string, limit = 200): Promise<LogsTailResponse> => {
     const response = await apiClient.requestEnvelope<LogsTailResponse | string[]>(`/api/v1/jobs/${encodeURIComponent(jobId)}/logs/tail?lines=${limit}`);
     const data = response.data;
@@ -197,14 +206,9 @@ export const jobsApi = {
   metricsWsUrl: (jobId: string): string => resolveWsUrl(`/api/v1/jobs/${encodeURIComponent(jobId)}/metrics/ws`),
   artifactsWsUrl: (jobId: string): string => resolveWsUrl(`/api/v1/jobs/${encodeURIComponent(jobId)}/artifacts/ws`),
 
-  /**
-   * 后端 events WS 消息格式：{ type: "events", job_id, status, job, log_tail }
-   * 前端解析为 EventMessage，保留所有字段。
-   */
   parseEventMessage(raw: string): EventMessage {
     const payload = JSON.parse(raw) as unknown;
     if (!isRecord(payload)) return { type: "raw", log_tail: [String(payload)] };
-
     return {
       type: stringFrom(payload.type) ?? "event",
       event_type: stringFrom(payload.event_type) ?? stringFrom(payload.type) ?? "event",
@@ -218,18 +222,14 @@ export const jobsApi = {
   },
 
   parseMetricsMessage(raw: string): Metrics {
-    const payload = JSON.parse(raw) as unknown;
-    // 后端格式：{ type: "metrics", job_id, data: {...} }
-    const data = isRecord(payload) && isRecord(payload.data) ? payload.data : payload;
-    return normalizeMetrics(data as Metrics) ?? { timestamp: new Date().toISOString() };
+    const payload = JSON.parse(raw) as Record<string, unknown>;
+    const data = isRecord(payload.data) ? payload.data : payload;
+    return normalizeMetrics(data) ?? { timestamp: new Date().toISOString() };
   },
 
   parseArtifactMessage(raw: string): ArtifactRecord[] {
-    const payload = JSON.parse(raw) as unknown;
-    // 后端格式：{ type: "artifacts", job_id, items: [...] }
-    if (isRecord(payload) && Array.isArray(payload.items)) return (payload.items as ArtifactRecord[]).map(normalizeArtifact);
-    if (isRecord(payload) && isRecord(payload.data) && Array.isArray(payload.data.items)) return (payload.data.items as ArtifactRecord[]).map(normalizeArtifact);
-    if (Array.isArray(payload)) return (payload as ArtifactRecord[]).map(normalizeArtifact);
-    return isRecord(payload) ? [normalizeArtifact(payload as ArtifactRecord)] : [];
+    const payload = JSON.parse(raw) as Record<string, unknown>;
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    return items.map((item) => normalizeArtifact(item as ArtifactRecord));
   },
 };
