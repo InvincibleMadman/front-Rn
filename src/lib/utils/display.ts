@@ -15,6 +15,15 @@ export function translateJobStatus(status: string | JobStatus): string {
     connecting: "连接中",
     idle: "空闲",
     error: "异常",
+    created: "待启动",
+    launching_target: "准备目标",
+    replaying_input: "回放输入",
+    waiting_signal: "等待异常",
+    collecting_context: "采集上下文",
+    llm_reasoning: "分析中",
+    locate_line: "定位代码",
+    classified: "已定位",
+    archived: "已归档",
   };
   return map[status] ?? status;
 }

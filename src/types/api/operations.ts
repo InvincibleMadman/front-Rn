@@ -9,6 +9,7 @@ export interface OperationLogItem {
   stage?: string;
   message?: string;
   data?: Record<string, unknown>;
+  kind?: string;
   [key: string]: unknown;
 }
 

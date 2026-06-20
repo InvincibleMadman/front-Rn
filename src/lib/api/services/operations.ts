@@ -15,8 +15,10 @@ export const operationsApi = {
     const response = await apiClient.requestEnvelope<OperationRecord>(`/api/v1/operations/${encodeURIComponent(operationId)}`);
     return response.data;
   },
-  tailLogs: async (operationId: string, since = 0, limit = 200): Promise<OperationLogTail> => {
-    const response = await apiClient.requestEnvelope<OperationLogTail>(`/api/v1/operations/${encodeURIComponent(operationId)}/logs/tail?since=${since}&limit=${limit}`);
+  tailLogs: async (operationId: string, since = 0, limit = 200, options?: { kinds?: string[] }): Promise<OperationLogTail> => {
+    const params = new URLSearchParams({ since: String(since), limit: String(limit) });
+    (options?.kinds ?? []).forEach((kind) => params.append("kinds", kind));
+    const response = await apiClient.requestEnvelope<OperationLogTail>(`/api/v1/operations/${encodeURIComponent(operationId)}/logs/tail?${params.toString()}`);
     return response.data;
   },
   logsWsUrl: (operationId: string): string => resolveWsUrl(`/api/v1/operations/${encodeURIComponent(operationId)}/logs/ws`),

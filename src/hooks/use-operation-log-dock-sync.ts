@@ -8,6 +8,7 @@ interface OperationDockBinding {
   source: string;
   label?: string;
   enabled?: boolean;
+  kinds?: string[];
 }
 
 function toDockLevel(level?: string): LogLevel {
@@ -45,7 +46,7 @@ export function useOperationLogDockSync(
   }, [bindings]);
 
   const signature = activeBindings
-    .map((binding) => `${binding.source}:${binding.label ?? ""}:${binding.operationId ?? ""}`)
+    .map((binding) => `${binding.source}:${binding.label ?? ""}:${binding.operationId ?? ""}:${(binding.kinds ?? []).join(",")}`)
     .join("|");
 
   useEffect(() => {
@@ -63,6 +64,7 @@ export function useOperationLogDockSync(
           operationId,
           cursorsRef.current[operationId] ?? 0,
           200,
+          binding.kinds?.length ? { kinds: binding.kinds } : undefined,
         );
 
         cursorsRef.current[operationId] =
@@ -74,6 +76,8 @@ export function useOperationLogDockSync(
         seenRef.current[operationId] = seen;
 
         (tail.items ?? []).forEach((item) => {
+          const itemKind = String(item.kind ?? "event");
+          if (binding.kinds?.length && !binding.kinds.includes(itemKind)) return;
           if (seen[item.seq]) return;
           seen[item.seq] = true;
 
