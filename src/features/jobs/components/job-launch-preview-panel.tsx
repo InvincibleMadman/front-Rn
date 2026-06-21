@@ -76,12 +76,12 @@ export function JobLaunchPreviewPanel({
           )) : <p className="text-sm text-muted-foreground">当前无额外助手说明。</p>}
         </CardContent>
       </Card>
-      <Card className="card-surface">
+      <Card className="card-surface overflow-hidden">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">将提交的结构化 payload</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="rounded-[var(--radius-lg)] border border-border/60 bg-background/55 p-3">
+          <div className="console-scrollbar max-h-[min(30rem,calc(100vh-var(--topbar-h)-10rem))] overflow-y-auto rounded-[var(--radius-lg)] border border-border/60 bg-background/55 p-3">
             <JsonViewer data={payload} compact />
           </div>
         </CardContent>

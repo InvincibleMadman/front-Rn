@@ -570,6 +570,9 @@ const metricAccentStyle = {
   { text: string; icon: string; iconBg: string; ring: string }
 >;
 
+const ORIGINAL_DARK_BLUE_SCOPE_CLASS =
+  "dark:[--accent-blue:221_84%_62%] dark:[--accent-blue-light:224_52%_20%] dark:[--accent-blue-hover:221_88%_68%] dark:[--color-info:221_84%_62%]";
+
 function MetricCard({
   title,
   value,
@@ -1155,31 +1158,33 @@ export function DashboardView(): JSX.Element {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          accent="blue"
-          title="节点状态"
-          value={`${formatNumber(metrics.nodeStatus.online)} / ${formatNumber(metrics.nodeStatus.total)}`}
-          description="Online backend nodes"
-          icon={Network}
-          ring={{
-            value: metrics.nodeStatus.online,
-            max: metrics.nodeStatus.total,
-            centerValue: `${metrics.nodeStatus.onlinePercent}%`,
-            label: "Online node ratio",
-          }}
-          chips={[
-            {
-              label: "Online",
+        <div className={ORIGINAL_DARK_BLUE_SCOPE_CLASS}>
+          <MetricCard
+            accent="blue"
+            title="节点状态"
+            value={`${formatNumber(metrics.nodeStatus.online)} / ${formatNumber(metrics.nodeStatus.total)}`}
+            description="Online backend nodes"
+            icon={Network}
+            ring={{
               value: metrics.nodeStatus.online,
-              variant: "success",
-            },
-            {
-              label: "Offline",
-              value: metrics.nodeStatus.offline,
-              variant: "warning",
-            },
-          ]}
-        />
+              max: metrics.nodeStatus.total,
+              centerValue: `${metrics.nodeStatus.onlinePercent}%`,
+              label: "Online node ratio",
+            }}
+            chips={[
+              {
+                label: "Online",
+                value: metrics.nodeStatus.online,
+                variant: "success",
+              },
+              {
+                label: "Offline",
+                value: metrics.nodeStatus.offline,
+                variant: "warning",
+              },
+            ]}
+          />
+        </div>
         <MetricCard
           accent="cyan"
           title="协议资产数"

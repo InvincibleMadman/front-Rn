@@ -153,6 +153,19 @@ const HOME_DEMO_SCREENS: DemoScreen[] = [
   },
 ];
 
+const HOME_PROJECT_INTRO = {
+  eyebrow: "Project Introduction",
+  title: "工业控制协议模糊测试与崩溃定位平台",
+  description:
+    "面向工控系统上线前验证场景，统一承载协议准备、任务编排、崩溃复现与证据链分析。",
+  highlights: [
+    "聚合协议准备、Fuzz 任务、漏洞回溯与 GDB 调试链路",
+    "支持多节点调度、结构化 payload 提交与结果分层收束",
+    "适合在这里放置项目摘要、核心能力与部署价值说明",
+  ],
+  tags: ["Protocol Fuzzing", "Crash Replay", "Evidence Trace"],
+} as const;
+
 function useReducedMotion(): boolean {
   const [reducedMotion, setReducedMotion] = useState(false);
 
@@ -398,6 +411,46 @@ function useDeckRotation(
   }, [count, reducedMotion, rotate]);
 
   return { order, frontCycle, selectSlide };
+}
+
+function useFullyVisibleSection<T extends HTMLElement>(threshold = 0.92): {
+  ref: RefObject<T | null>;
+  fullyVisible: boolean;
+} {
+  const ref = useRef<T>(null);
+  const [fullyVisible, setFullyVisible] = useState(false);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    if (typeof IntersectionObserver !== "function") {
+      setFullyVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const rootTop = entry.rootBounds?.top ?? 0;
+        const rootBottom = entry.rootBounds?.bottom ?? window.innerHeight;
+        const withinViewport =
+          entry.boundingClientRect.top >= rootTop &&
+          entry.boundingClientRect.bottom <= rootBottom;
+
+        setFullyVisible(
+          entry.isIntersecting &&
+          entry.intersectionRatio >= threshold &&
+          withinViewport,
+        );
+      },
+      { threshold: [0, 0.35, 0.6, 0.82, 0.92, 1] },
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [threshold]);
+
+  return { ref, fullyVisible };
 }
 
 function formatMetric(value: number, suffix: string | undefined, progress: number): string {
@@ -782,8 +835,79 @@ function DemoScreenCard({
   );
 }
 
+function PreviewFocusPanel({
+  visible,
+  reducedMotion,
+  compact = false,
+}: {
+  visible: boolean;
+  reducedMotion: boolean;
+  compact?: boolean;
+}): JSX.Element {
+  return (
+    <aside
+      className={cn(
+        "h-fit border border-white/14 bg-white/28 text-left backdrop-blur-[14px]",
+        "dark:border-[hsl(var(--border)/0.8)] dark:bg-[rgba(15,23,42,0.32)]",
+        compact ? "rounded-[1.9rem]" : "rounded-r-[1.75rem] rounded-l-none",
+        compact ? "px-4 py-4" : "min-h-[13rem] max-h-[20rem] min-w-[26rem] max-w-[38rem] px-5 py-4 xl:min-h-[14rem] xl:max-h-[22rem] xl:min-w-[29rem] xl:max-w-[42rem] xl:px-6 xl:py-5",
+        reducedMotion
+          ? undefined
+          : "transition-[transform,opacity,filter] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]",
+        visible ? "translate-x-0 opacity-100 blur-0" : "-translate-x-[4.75rem] opacity-0 blur-[2px]",
+      )}
+    >
+      <div
+        className={cn(
+          compact
+            ? "space-y-3"
+            : "grid grid-cols-[minmax(0,1.34fr)_minmax(0,0.94fr)] items-start gap-4",
+        )}
+      >
+        <div>
+          <p className="text-[11.5px] font-semibold uppercase tracking-[0.24em] text-[hsl(var(--text-tertiary))]">
+            {HOME_PROJECT_INTRO.eyebrow}
+          </p>
+          <h3
+            className={cn(
+              "mt-3 font-semibold tracking-tight text-[hsl(var(--text-primary))]",
+              compact ? "text-[1.25rem]" : "text-[1.62rem] xl:text-[1.78rem]",
+            )}
+          >
+            {HOME_PROJECT_INTRO.title}
+          </h3>
+          <p
+            className={cn(
+              "mt-3 text-[hsl(var(--text-secondary))]",
+              compact ? "text-[15px] leading-[1.625rem]" : "text-[16.5px] leading-8 xl:text-[17.5px]",
+            )}
+          >
+            {HOME_PROJECT_INTRO.description}
+          </p>
+        </div>
+
+        <div
+          className={cn(
+            compact ? "space-y-3" : "space-y-1.5 border-l border-white/12 pl-4 dark:border-white/8",
+          )}
+        >
+          {HOME_PROJECT_INTRO.highlights.map((item) => (
+            <p
+              key={item}
+              className="text-[15px] leading-[1.8rem] text-[hsl(var(--text-secondary))]"
+            >
+              {item}
+            </p>
+          ))}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 function PreviewDeck({ reducedMotion }: { reducedMotion: boolean }): JSX.Element {
   const { order, frontCycle, selectSlide } = useDeckRotation(HOME_DEMO_SCREENS.length, reducedMotion);
+  const { ref: previewRef, fullyVisible } = useFullyVisibleSection<HTMLDivElement>(0.92);
 
   const resolveState = (index: number): "front" | "middle" | "back" => {
     if (index === order[0]) return "front";
@@ -792,9 +916,9 @@ function PreviewDeck({ reducedMotion }: { reducedMotion: boolean }): JSX.Element
   };
 
   const transformMap: Record<"front" | "middle" | "back", string> = {
-    front: "translate3d(-50%, -50%, 0) scale(1)",
-    middle: "translate3d(-36%, -56%, 0) scale(0.92)",
-    back: "translate3d(-22%, -62%, 0) scale(0.84)",
+    front: "translate3d(-50%, -43.8%, 0) scale(1)",
+    middle: "translate3d(-36%, -49.2%, 0) scale(0.92)",
+    back: "translate3d(-22%, -54.8%, 0) scale(0.84)",
   };
 
   const filterMap: Record<"front" | "middle" | "back", string> = {
@@ -810,69 +934,96 @@ function PreviewDeck({ reducedMotion }: { reducedMotion: boolean }): JSX.Element
   };
 
   return (
-    <section className="mx-auto w-full xl:w-[94%]">
-      <div className="relative mx-auto w-full overflow-visible">
-        <div className="relative aspect-[1.48/1] w-full overflow-visible sm:aspect-[1.68/1] lg:aspect-[1.92/1] xl:aspect-[2.08/1]">
-          {HOME_DEMO_SCREENS.map((screen, index) => {
-            const state = resolveState(index);
-            const isActive = state === "front";
-            const animationKey = isActive ? `${screen.id}-${frontCycle}` : `${screen.id}-idle`;
-
-            return (
-              <div
-                key={screen.id}
-                className="absolute left-1/2 top-1/2 h-[82%] w-[80%] transition-[transform,filter,opacity] duration-700 sm:w-[77%] lg:w-[73%] xl:w-[71%]"
-                style={{
-                  transform: transformMap[state],
-                  filter: filterMap[state],
-                  opacity: opacityMap[state],
-                  zIndex: state === "front" ? 30 : state === "middle" ? 20 : 10,
-                  transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
-                }}
-              >
-                <DemoScreenCard
-                  screen={screen}
-                  state={state}
-                  active={isActive}
-                  animationKey={animationKey}
-                  reducedMotion={reducedMotion}
-                />
-              </div>
-            );
-          })}
+    <section className="mx-auto mb-16 w-full lg:mb-24 xl:mb-28 xl:w-[90%]">
+      <div ref={previewRef} className="relative mx-auto w-full overflow-visible">
+        <div className="mb-5 lg:hidden">
+          <PreviewFocusPanel
+            visible={fullyVisible}
+            reducedMotion={reducedMotion}
+            compact
+          />
         </div>
-      </div>
 
-      <div className="mt-8 flex items-center justify-center gap-3">
-        {HOME_DEMO_SCREENS.map((screen, index) => {
-          const active = order[0] === index;
+        <div className="relative lg:min-h-[36rem] xl:min-h-[39rem]">
+          <div className="pointer-events-none absolute left-[calc((100vw-100%)/-2)] top-1/2 z-20 hidden w-fit max-w-[42rem] -translate-y-1/2 lg:block xl:max-w-[46rem]">
+            <PreviewFocusPanel
+              visible={fullyVisible}
+              reducedMotion={reducedMotion}
+            />
+          </div>
 
-          return (
-            <button
-              key={screen.id}
-              type="button"
-              aria-label={`切换到 ${screen.title}`}
-              aria-pressed={active}
-              onClick={() => selectSlide(index)}
-              className="group relative flex size-4 items-center justify-center rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent-blue))] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            >
-              <span
-                className={cn(
-                  "absolute inset-0 rounded-full border transition-all duration-300",
-                  active ? "scale-100 border-[hsl(var(--accent-blue)/0.22)]" : "scale-75 border-transparent group-hover:border-[hsl(var(--accent-blue)/0.14)]",
-                )}
-              />
-              <span
-                className={cn(
-                  "block rounded-full transition-all duration-300",
-                  active
-                    ? "size-2.5 bg-[hsl(var(--accent-blue))] shadow-[0_0_0_6px_hsl(var(--accent-blue)/0.12)]"
-                    : "size-2 bg-[hsl(var(--text-tertiary)/0.34)] group-hover:bg-[hsl(var(--accent-blue)/0.56)]",
-                )}
-              />
-            </button>
-          );
-        })}
+          <div
+            className={cn(
+              "relative mx-auto w-full overflow-visible lg:w-[94%] xl:w-[91%]",
+              reducedMotion
+                ? undefined
+                : "transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              fullyVisible ? "lg:translate-x-[9.5rem] xl:translate-x-[12rem]" : "translate-x-0",
+            )}
+          >
+            <div className="relative aspect-[1.4/1] w-full overflow-visible sm:aspect-[1.54/1] lg:aspect-[1.72/1] xl:aspect-[1.84/1]">
+              {HOME_DEMO_SCREENS.map((screen, index) => {
+                const state = resolveState(index);
+                const isActive = state === "front";
+                const animationKey = isActive ? `${screen.id}-${frontCycle}` : `${screen.id}-idle`;
+
+                return (
+                  <div
+                    key={screen.id}
+                    className="absolute left-1/2 top-1/2 h-[86%] w-[71%] transition-[transform,filter,opacity] duration-700 sm:w-[69%] lg:w-[65%] xl:w-[63%]"
+                    style={{
+                      transform: transformMap[state],
+                      filter: filterMap[state],
+                      opacity: opacityMap[state],
+                      zIndex: state === "front" ? 30 : state === "middle" ? 20 : 10,
+                      transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+                    }}
+                  >
+                    <DemoScreenCard
+                      screen={screen}
+                      state={state}
+                      active={isActive}
+                      animationKey={animationKey}
+                      reducedMotion={reducedMotion}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-8 flex items-center justify-center gap-3">
+              {HOME_DEMO_SCREENS.map((screen, index) => {
+                const active = order[0] === index;
+
+                return (
+                  <button
+                    key={screen.id}
+                    type="button"
+                    aria-label={`切换到 ${screen.title}`}
+                    aria-pressed={active}
+                    onClick={() => selectSlide(index)}
+                    className="group relative flex size-4 items-center justify-center rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent-blue))] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  >
+                    <span
+                      className={cn(
+                        "absolute inset-0 rounded-full border transition-all duration-300",
+                        active ? "scale-100 border-[hsl(var(--accent-blue)/0.22)]" : "scale-75 border-transparent group-hover:border-[hsl(var(--accent-blue)/0.14)]",
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "block rounded-full transition-all duration-300",
+                        active
+                          ? "size-2.5 bg-[hsl(var(--accent-blue))] shadow-[0_0_0_6px_hsl(var(--accent-blue)/0.12)]"
+                          : "size-2 bg-[hsl(var(--text-tertiary)/0.34)] group-hover:bg-[hsl(var(--accent-blue)/0.56)]",
+                      )}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -1065,7 +1216,7 @@ export function HomeView(): JSX.Element {
             </div>
           </section>
 
-          <div className="relative -mt-4 space-y-16 pb-8 sm:-mt-8 lg:-mt-10">
+          <div className="relative -mt-4 space-y-24 pb-8 sm:-mt-8 lg:-mt-10 xl:space-y-28">
             <PreviewDeck reducedMotion={reducedMotion} />
 
             <DiscoveryFlowPanel reducedMotion={reducedMotion} />

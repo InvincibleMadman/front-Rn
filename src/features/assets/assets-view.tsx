@@ -184,7 +184,7 @@ export function AssetsView(): JSX.Element {
 
   return (
     <div
-      className={isGraphTab ? "flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden bg-transparent" : "min-h-0 min-w-0 space-y-4"}
+      className={isGraphTab ? "asset-page-shell flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden bg-transparent" : "asset-page-shell min-h-0 min-w-0 space-y-4"}
       style={graphViewportStyle}
     >
       <AssetShell

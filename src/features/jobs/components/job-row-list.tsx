@@ -16,7 +16,13 @@ function command(job: Job): string {
 }
 
 export function JobRowList({ jobs }: { jobs: Job[] }): JSX.Element {
-  if (!jobs.length) return <EmptyState title="暂无匹配任务" description="调整筛选条件或先创建新的 Fuzz 任务。" />;
+  if (!jobs.length) {
+    return (
+      <Card className="card-surface p-4">
+        <EmptyState title="暂无匹配任务" description="调整筛选条件或先创建新的 Fuzz 任务。" />
+      </Card>
+    );
+  }
   return (
     <div className="space-y-3">
       {jobs.map((job) => {

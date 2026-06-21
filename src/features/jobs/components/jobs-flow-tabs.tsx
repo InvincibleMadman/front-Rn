@@ -29,7 +29,9 @@ export function JobsFlowTabs({
           <button key={key} type="button" onClick={() => onChange(key)} className="text-left">
             <Card className={cn(
               "card-surface h-full p-4 transition-all",
-              active ? "border-primary/60 shadow-[0_0_0_1px_hsl(var(--primary)/0.12)]" : "hover:border-primary/30",
+              active
+                ? "border-primary/70 shadow-[0_0_0_1px_hsl(var(--ring)/0.16),0_10px_24px_hsl(var(--ring)/0.10)] dark:border-primary/80 dark:shadow-[0_0_0_1px_hsl(var(--ring)/0.42),0_0_0_0.2rem_hsl(var(--ring)/0.22),0_18px_36px_hsl(var(--ring)/0.18)]"
+                : "hover:border-primary/30 dark:hover:border-primary/45",
             )}>
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1.5">

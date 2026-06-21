@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { dockLog } from "@/components/layout/dock";
 import { protocolsApi } from "@/lib/api/services/protocols";
 import { reportsApi } from "@/lib/api/services/reports";
+import { cn } from "@/lib/utils/cn";
 import type { ReportGenerationOptions } from "@/features/reports/components/report-generation-config-panel";
 import type { ReportReadinessNode } from "@/types/api/reports";
 import { ReportReadinessBoard } from "@/features/reports/components/report-readiness-board";
@@ -13,6 +14,7 @@ import { ReportReadinessTree } from "@/features/reports/components/report-readin
 import { ReportAssetPreviewPane } from "@/features/reports/components/report-asset-preview-pane";
 import { ReportGenerationConfigPanel } from "@/features/reports/components/report-generation-config-panel";
 import { ReportGenerationSummary } from "@/features/reports/components/report-generation-summary";
+import { ReportHistoryPanel } from "@/features/reports/components/report-history-panel";
 
 function pickDefaultNode(root?: ReportReadinessNode): ReportReadinessNode | undefined {
   if (!root) return undefined;
@@ -38,7 +40,8 @@ function findNode(root: ReportReadinessNode | undefined, id: string | undefined)
 }
 
 export function ReportsView(): JSX.Element {
-  const [protocol, setProtocol] = useState("legacy-default");
+  const [protocol, setProtocol] = useState("");
+  const [subpage, setSubpage] = useState<"workspace" | "history">("workspace");
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(undefined);
   const [options, setOptions] = useState<ReportGenerationOptions>({
     title: "",
@@ -59,6 +62,15 @@ export function ReportsView(): JSX.Element {
   const listQuery = useQuery({ queryKey: ["reports-list", protocol], queryFn: () => reportsApi.list(protocol), enabled: Boolean(protocol) });
 
   useEffect(() => {
+    const protocolOptions = protocolsQuery.data ?? [];
+    if (!protocolOptions.length) return;
+    if (!protocol) {
+      setProtocol(protocolOptions[0]);
+    }
+  }, [protocolsQuery.data, protocol]);
+
+  useEffect(() => {
+    if (!protocol) return;
     if (!options.title.trim()) {
       setOptions((current) => ({ ...current, title: `${protocol} 协议安全测试报告` }));
     }
@@ -106,40 +118,77 @@ export function ReportsView(): JSX.Element {
           board={<ReportReadinessBoard preview={previewQuery.data} />}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[18rem_minmax(0,1.08fr)_24rem]">
-        <div className="space-y-4">
-          <div className="card-surface rounded-[var(--radius-xl)] p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Protocol</p>
-            <Input list="report-protocols" value={protocol} onChange={(event) => { setProtocol(event.target.value); dockLog("info", "reports", "report protocol changed", { protocol: event.target.value }); }} placeholder="modbus" className="mt-3" />
+      <div className="card-surface rounded-[var(--radius-xl)] p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/65 p-1">
+            {[
+              { key: "workspace", label: "工作区" },
+              { key: "history", label: "历史报告" },
+            ].map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setSubpage(item.key as "workspace" | "history")}
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-sm transition-colors",
+                  subpage === item.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary",
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="min-w-[16rem] flex-1">
+            <Input
+              list="report-protocols"
+              value={protocol}
+              onChange={(event) => {
+                const next = event.target.value;
+                setProtocol(next);
+                dockLog("info", "reports", "report protocol changed", { protocol: next || "empty" });
+              }}
+              placeholder={protocolsQuery.isLoading ? "加载协议中..." : "输入或选择协议"}
+              className="bg-background/80"
+            />
             <datalist id="report-protocols">
               {(protocolsQuery.data ?? []).map((item) => <option key={item} value={item} />)}
             </datalist>
           </div>
-          <ReportReadinessTree
-            root={previewQuery.data?.readiness_tree}
-            selectedId={selectedNode?.id}
-            onSelect={(node) => {
-              setSelectedNodeId(node.id);
-              dockLog("info", "reports", "report section selected", { node_id: node.id, title: node.title, status: node.status });
-            }}
-          />
-        </div>
-
-        <ReportAssetPreviewPane preview={previewQuery.data} selectedNode={selectedNode} />
-
-        <div className="space-y-4">
-          <ReportGenerationConfigPanel
-            protocol={protocol}
-            options={options}
-            generating={generateMutation.isPending}
-            canGenerate={Boolean(protocol)}
-            onChange={setOptions}
-            onGenerate={() => generateMutation.mutate()}
-            onRefresh={refreshAll}
-          />
-          <ReportGenerationSummary protocol={protocol} preview={previewQuery.data} reports={listQuery.data ?? []} />
         </div>
       </div>
+
+      {subpage === "workspace" ? (
+        <div className="grid gap-4 xl:grid-cols-[18rem_minmax(0,1.08fr)_24rem]">
+          <div className="space-y-4">
+            <ReportReadinessTree
+              root={previewQuery.data?.readiness_tree}
+              selectedId={selectedNode?.id}
+              onSelect={(node) => {
+                setSelectedNodeId(node.id);
+                dockLog("info", "reports", "report section selected", { node_id: node.id, title: node.title, status: node.status });
+              }}
+            />
+          </div>
+
+          <ReportAssetPreviewPane preview={previewQuery.data} selectedNode={selectedNode} />
+
+          <div className="space-y-4">
+            <ReportGenerationConfigPanel
+              protocol={protocol}
+              options={options}
+              generating={generateMutation.isPending}
+              canGenerate={Boolean(protocol)}
+              onChange={setOptions}
+              onGenerate={() => generateMutation.mutate()}
+              onRefresh={refreshAll}
+            />
+            <ReportGenerationSummary protocol={protocol} preview={previewQuery.data} />
+          </div>
+        </div>
+      ) : (
+        <ReportHistoryPanel protocol={protocol} reports={listQuery.data ?? []} summary={summaryQuery.data} />
+      )}
     </div>
   );
 }

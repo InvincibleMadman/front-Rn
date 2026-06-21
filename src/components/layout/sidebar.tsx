@@ -44,6 +44,9 @@ const offlineChildren = [
   { label: "插桩处理", tab: "instrument" },
 ] as const;
 
+const SIDEBAR_PRIMARY_NAV_BUTTON_CLASS =
+  "flex w-full items-center gap-7 rounded-[var(--radius-xl)] px-3 py-3 text-[18px] font-medium transition-all";
+
 export function Sidebar(): JSX.Element {
   const location = useLocation();
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
@@ -116,7 +119,7 @@ export function Sidebar(): JSX.Element {
             !showExpandedContent && "justify-center",
           )}
         >
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--accent-blue))] via-[hsl(var(--accent-pink))] to-[hsl(var(--accent-orange))] text-white shadow-lg shadow-black/20">
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--accent-blue))] via-[hsl(var(--accent-pink))] to-[hsl(var(--accent-orange))] text-white shadow-lg shadow-black/20 dark:bg-[linear-gradient(145deg,#fff7ff_0%,#f2b2ff_34%,#9a7cff_68%,#6ea8ff_100%)]">
             <Blocks className="size-6" />
           </div>
           {showExpandedContent ? (
@@ -142,7 +145,7 @@ export function Sidebar(): JSX.Element {
                 to={item.to}
                 className={({ isActive }) =>
                   cn(
-                    "flex w-full items-center gap-7 rounded-[var(--radius-xl)] px-3 py-3 text-[18px] font-medium transition-all",
+                    SIDEBAR_PRIMARY_NAV_BUTTON_CLASS,
                     !showExpandedContent && "justify-center",
                     isActive
                       ? "bg-white/12 text-[hsl(var(--sidebar-text))] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
@@ -160,15 +163,13 @@ export function Sidebar(): JSX.Element {
 
           <div
             className={cn(
-              "transition-colors",
-              showExpandedContent
-                ? "mt-3 rounded-[var(--radius-xl)] border p-1.5"
-                : "rounded-[var(--radius-xl)] border border-transparent p-0",
+              "rounded-[var(--radius-xl)] transition-colors",
+              showExpandedContent ? "border p-1.5" : "border border-transparent p-1.5",
               showExpandedContent
                 ? isOfflineRoute
                   ? "border-transparent bg-white/6"
                   : "border-transparent bg-transparent"
-                : "",
+                : "bg-transparent",
             )}
           >
             <div className="flex items-center gap-1.5">
@@ -176,10 +177,9 @@ export function Sidebar(): JSX.Element {
                 to="/offline?tab=protocol"
                 onClick={() => setOfflineNavExpanded(true)}
                 className={cn(
-                  "flex min-w-0 flex-1 items-center gap-7 px-3 py-3 text-[18px] font-medium transition-all",
-                  showExpandedContent
-                    ? "rounded-[var(--radius-lg)]"
-                    : "w-full rounded-[var(--radius-xl)]",
+                  SIDEBAR_PRIMARY_NAV_BUTTON_CLASS,
+                  "min-w-0 flex-1",
+                  showExpandedContent && "min-h-[3.25rem] leading-6",
                   !showExpandedContent && "justify-center",
                   isOfflineRoute
                     ? showExpandedContent
@@ -198,7 +198,10 @@ export function Sidebar(): JSX.Element {
                   type="button"
                   onClick={toggleOfflineNavExpanded}
                   aria-label={showOfflineChildren ? "收起离线导航" : "展开离线导航"}
-                  className="flex size-12 shrink-0 items-center justify-center rounded-lg text-[hsl(var(--sidebar-text-subtle))] transition-colors hover:bg-white/8 hover:text-[hsl(var(--sidebar-text))]"
+                  className={cn(
+                    "flex w-12 shrink-0 items-center justify-center rounded-[var(--radius-xl)] text-[hsl(var(--sidebar-text-subtle))] transition-colors hover:bg-white/8 hover:text-[hsl(var(--sidebar-text))]",
+                    showExpandedContent && "h-[3.25rem]",
+                  )}
                 >
                   {showOfflineChildren ? (
                     <ChevronDown className="size-5" />
@@ -232,7 +235,7 @@ export function Sidebar(): JSX.Element {
             ) : null}
           </div>
 
-          <div className="mt-3 space-y-1.5">
+          <div className="space-y-1.5">
             {navigation.slice(1).map((item) => {
               const Icon = item.icon;
               return (

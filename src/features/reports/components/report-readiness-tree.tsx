@@ -103,7 +103,7 @@ export function ReportReadinessTree({
   const displaySelectedId = root ? selectedId : PLACEHOLDER_TREE.children?.[0]?.id;
 
   return (
-    <Card className="card-surface h-full">
+    <Card className="card-surface">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base"><FolderTree className="size-4.5" /> 章节准备树</CardTitle>
       </CardHeader>

@@ -1,4 +1,5 @@
 import { Outlet } from "react-router-dom";
+import { AppShellPageBackground } from "@/components/layout/app-shell-page-background";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { Dock } from "@/components/layout/dock";
@@ -9,6 +10,7 @@ export function AppShell(): JSX.Element {
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-transparent">
+      <AppShellPageBackground />
       <Sidebar />
       <div
         className="relative flex min-w-0 flex-1 flex-col overflow-hidden"
@@ -19,14 +21,14 @@ export function AppShell(): JSX.Element {
       >
         <Topbar />
         <main
-          className="console-scrollbar relative min-h-0 flex-1 overflow-y-auto"
+          className="console-scrollbar relative z-10 min-h-0 flex-1 overflow-y-auto"
           style={{
             paddingTop: "var(--topbar-h)",
             paddingBottom: "var(--dock-h)",
           }}
         >
           <div
-            className="mx-auto w-full"
+            className="relative z-10 mx-auto w-full"
             style={{
               maxWidth: "var(--content-max)",
               paddingInline: "var(--page-gutter)",

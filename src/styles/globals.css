@@ -533,6 +533,155 @@
     border-color: hsl(var(--border) / 0.82);
   }
 
+  .app-page-bg-shell {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .app-page-bg-layer {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    will-change: opacity;
+    transition: opacity 320ms ease;
+    -webkit-mask-mode: alpha;
+    mask-mode: alpha;
+    background:
+      linear-gradient(
+        135deg,
+        hsl(var(--text-primary) / var(--page-ornament-light-low, 0.08)),
+        hsl(var(--text-primary) / var(--page-ornament-light-high, 0.12))
+      );
+    filter: drop-shadow(0 0 0 hsl(var(--text-primary) / 0.01));
+  }
+
+  .app-page-bg-layer[data-active="true"] {
+    opacity: 1;
+  }
+
+  .dark .app-page-bg-layer {
+      background:
+        linear-gradient(
+          135deg,
+          hsl(0 0% 100% / var(--page-ornament-dark-low, 0.04)),
+          hsl(0 0% 100% / var(--page-ornament-dark-high, 0.11))
+        );
+      filter:
+        drop-shadow(0 0 18px hsl(0 0% 100% / 0.14))
+        drop-shadow(0 0 42px hsl(0 0% 100% / 0.1));
+    }
+
+  .glass-card {
+    background-color: hsl(var(--card) / 0.88);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .dark .glass-card {
+    background-color: hsl(var(--card) / 0.82);
+  }
+
+  .console-data-card {
+    background: hsl(var(--bg-surface) / 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .dark .console-data-card {
+    background: hsl(var(--bg-surface-elevated) / 0.84);
+  }
+
+  .analysis-panel {
+    background:
+      linear-gradient(180deg, hsl(var(--bg-surface-elevated) / 0.88), hsl(var(--bg-surface) / 0.76));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .dark .analysis-panel {
+    background:
+      linear-gradient(180deg, hsl(var(--bg-surface-elevated) / 0.84), hsl(var(--bg-surface) / 0.72));
+  }
+
+  .analysis-cabin {
+    background:
+      linear-gradient(180deg, hsl(var(--bg-surface-elevated) / 0.9), hsl(var(--bg-surface) / 0.8));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .dark .analysis-cabin {
+    background:
+      linear-gradient(180deg, hsl(var(--bg-surface-elevated) / 0.86), hsl(var(--bg-surface) / 0.74));
+  }
+
+  .bg-card {
+    background-color: hsl(var(--card) / 0.88);
+  }
+
+  .dark .bg-card {
+    background-color: hsl(var(--card) / 0.82);
+  }
+
+  .bg-card\/90 {
+    background-color: hsl(var(--card) / 0.8);
+  }
+
+  .dark .bg-card\/90 {
+    background-color: hsl(var(--card) / 0.76);
+  }
+
+  .asset-page-shell .bg-background\/60 {
+    background-color: hsl(var(--card) / 0.82);
+  }
+
+  .dark .asset-page-shell .bg-background\/60 {
+    background-color: hsl(var(--card) / 0.78);
+  }
+
+  .asset-page-shell .bg-background\/70 {
+    background-color: hsl(var(--card) / 0.86);
+  }
+
+  .dark .asset-page-shell .bg-background\/70 {
+    background-color: hsl(var(--card) / 0.8);
+  }
+
+  .asset-page-shell .bg-background\/80 {
+    background-color: hsl(var(--card) / 0.9);
+  }
+
+  .dark .asset-page-shell .bg-background\/80 {
+    background-color: hsl(var(--card) / 0.84);
+  }
+
+  .asset-page-shell .bg-background\/90 {
+    background-color: hsl(var(--card) / 0.92);
+  }
+
+  .dark .asset-page-shell .bg-background\/90 {
+    background-color: hsl(var(--card) / 0.86);
+  }
+
+  .asset-page-shell .bg-card\/70 {
+    background-color: hsl(var(--card) / 0.84);
+  }
+
+  .dark .asset-page-shell .bg-card\/70 {
+    background-color: hsl(var(--card) / 0.8);
+  }
+
+  .asset-page-shell .hover\:bg-background\/80:hover {
+    background-color: hsl(var(--card) / 0.88);
+  }
+
+  .dark .asset-page-shell .hover\:bg-background\/80:hover {
+    background-color: hsl(var(--card) / 0.82);
+  }
+
   .settings-page-shell {
     display: flex;
     width: 100%;

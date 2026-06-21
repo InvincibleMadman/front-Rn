@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils/cn";
 
+const ASSET_GRAPH_DARK_THEME_CLASS =
+  "dark:[--accent-blue:221_84%_62%] dark:[--accent-blue-light:224_52%_20%] dark:[--accent-blue-hover:221_88%_68%] dark:[--color-info:221_84%_62%]";
+
 interface AssetGraphViewportLayoutProps {
   toolbar: ReactNode;
   children: ReactNode;
@@ -15,7 +18,13 @@ export function AssetGraphViewportLayout({
   className,
 }: AssetGraphViewportLayoutProps): JSX.Element {
   return (
-    <section className={cn("flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-hidden bg-transparent", className)}>
+    <section
+      className={cn(
+        "flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-hidden bg-transparent",
+        ASSET_GRAPH_DARK_THEME_CLASS,
+        className,
+      )}
+    >
       <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border border-border bg-card px-4 py-3">
         {toolbar}
       </div>

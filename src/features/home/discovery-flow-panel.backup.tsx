@@ -134,6 +134,15 @@ export function DiscoveryFlowPanel({ reducedMotion }: DiscoveryFlowPanelProps): 
               </span>
             </div>
 
+            <div className="mt-4 overflow-hidden rounded-[1.45rem] border border-slate-300/70 bg-[linear-gradient(180deg,#eef2f7,#dde6ef)] px-3 py-3 shadow-[0_18px_36px_rgba(15,23,42,0.06)] dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(71,85,105,0.34),rgba(30,41,59,0.18))]">
+              <img
+                src="/home-device.svg"
+                alt="工控设备示意图"
+                className="block h-auto w-full"
+                draggable={false}
+              />
+            </div>
+
             <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
               <div className="rounded-[1.45rem] border border-slate-300/70 bg-[linear-gradient(180deg,#edf2f8,#d9e1eb)] p-3 shadow-[0_20px_40px_rgba(15,23,42,0.08)] dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(71,85,105,0.94),rgba(30,41,59,0.98))]">
                 <div className="rounded-[1.12rem] border border-slate-300/70 bg-white/92 p-3 dark:border-slate-700/80 dark:bg-slate-950/74">

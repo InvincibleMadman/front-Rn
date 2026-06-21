@@ -1650,7 +1650,7 @@ export function OfflineStudioView(): JSX.Element {
                 </CardContent>
               </Card>
 
-              <details className="rounded-2xl border border-border/60 bg-background/45 p-4">
+              <details className="card-surface rounded-2xl border border-border/60 bg-background/45 p-4">
                 <summary className="cursor-pointer text-sm font-medium">原始预览 JSON</summary>
                 <div className="mt-3">
                   <JsonViewer data={previewData ?? { status: "idle" }} compact />
@@ -1932,7 +1932,7 @@ export function OfflineStudioView(): JSX.Element {
                 </CardContent>
               </Card>
 
-              <details className="rounded-2xl border border-border/60 bg-background/45 p-4">
+              <details className="card-surface rounded-2xl border border-border/60 bg-background/45 p-4">
                 <summary className="cursor-pointer text-sm font-medium">原始插桩 JSON</summary>
                 <div className="mt-3">
                   <JsonViewer data={instrumentData ?? { status: "idle" }} compact />
