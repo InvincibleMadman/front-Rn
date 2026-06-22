@@ -96,3 +96,29 @@ Environment=FRONTEND_PORT=8080
 - ECharts or graph code loads only on chart pages.
 - Upstream proxy connections are reused.
 - Home page requests only necessary APIs.
+
+
+## Verified Deployment Experiment (Container, 2026-06-22)
+
+I performed a live Nginx validation in the container using the same routing model as `deploy/nginx/front-xe.conf.example`:
+
+- Static root served `index.html` successfully and returned `Cache-Control: no-cache`.
+- `/assets/*` returned `Cache-Control: public, max-age=31536000, immutable`.
+- `/node-api/*` proxied correctly to an upstream HTTP service without falling back to SPA HTML.
+- `nginx -t` passed for the adapted config before the runtime verification.
+
+Observed deployment pitfall:
+
+- If the deployed `dist/` directory sits inside a path that Nginx workers cannot traverse, Nginx returns `404` for `/` and `/assets/*` even when the files exist.
+- In my first run, a temporary directory with restrictive permissions caused false `404/502` symptoms.
+- Fix: ensure the deployed static root and every parent directory are readable and executable by the Nginx worker user, or place the build under a normal application path such as `/opt/front-rn/dist`.
+
+Recommended preflight checks for Linux production:
+
+```bash
+nginx -t
+namei -l /opt/front-rn/dist/index.html
+curl -I http://127.0.0.1/
+curl -I http://127.0.0.1/assets/<real-built-chunk>.js
+curl http://127.0.0.1/node-api/health
+```

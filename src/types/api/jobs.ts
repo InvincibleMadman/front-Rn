@@ -274,3 +274,5 @@ export interface JobRuntimeResponse {
   metrics: Metrics | null;
   artifact_counts: Record<string, number>;
 }
+
+export type JobsActivity = JobsMonitorOverview;
