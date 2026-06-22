@@ -1,22 +1,15 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
-import {
-  Activity,
-  ArrowRight,
-  Binary,
-  Bug,
-  LockKeyhole,
-  Radar,
-  ShieldCheck,
-} from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowRight, Home, MoonStar, ShieldCheck, SunMedium } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/common/form-field";
 import { ApiErrorReporter } from "@/components/common/api-error-alert";
-import { cn } from "@/lib/utils/cn";
 import { authApi } from "@/lib/api/services/auth";
+import { cn } from "@/lib/utils/cn";
+import { useUiStore } from "@/stores/ui-store";
 
 function sanitizeNextPath(value: string | null): string | null {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
@@ -24,9 +17,16 @@ function sanitizeNextPath(value: string | null): string | null {
   return value;
 }
 
+function getLoginInitial(username: string): string {
+  const value = username.trim();
+  return value ? value.charAt(0).toUpperCase() : "U";
+}
+
 export function LoginPage(): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useUiStore((state) => state.theme);
+  const toggleTheme = useUiStore((state) => state.toggleTheme);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const nextFromQuery = sanitizeNextPath(new URLSearchParams(location.search).get("next"));
@@ -38,178 +38,191 @@ export function LoginPage(): JSX.Element {
     onSuccess: () => navigate(from, { replace: true }),
   });
 
-  const capabilityCards = [
-    {
-      title: "Protocol Analysis",
-      description: "协议结构抽取与链路切片，建立后续 fuzz 任务的输入边界。",
-      icon: Radar,
-    },
-    {
-      title: "Risk Instrumentation",
-      description: "风险识别与插桩处理在同一控制面收敛，保持 /api/v1/* 主链路一致。",
-      icon: Binary,
-    },
-    {
-      title: "GDB Debug Sessions",
-      description: "调试追踪、崩溃回放与证据链定位保持在专业控制台语义内。",
-      icon: Activity,
-    },
-  ] as const;
+  const avatarInitial = useMemo(() => getLoginInitial(username), [username]);
+  const topControlSizeClass = "h-[clamp(3.02rem,5vh,3.28rem)]";
+  const topControlWidthClass = "w-[clamp(3.02rem,5vh,3.28rem)]";
+  const topCircleButtonClass = cn(
+    "rounded-full border-border/70 bg-background/60 shadow-console backdrop-blur-xl",
+    topControlSizeClass,
+    topControlWidthClass,
+  );
+  const topThemeIconClass = "size-[1.5rem]";
+  const topHomeIconClass = "size-[1.5rem]";
+  const topBrandPillClass = `inline-flex ${topControlSizeClass} items-center gap-[0.66rem] rounded-full border border-border/70 bg-background/60 px-[0.86rem] shadow-console backdrop-blur-xl`;
+
+  const pageBackgroundImage = useMemo(
+    () =>
+      (
+        theme === "dark"
+          ? [
+              "radial-gradient(circle at 18% 16%, hsl(var(--accent-blue) / 0.26), transparent 24%)",
+              "radial-gradient(circle at 84% 18%, hsl(258 84% 72% / 0.2), transparent 22%)",
+              "radial-gradient(circle at 68% 82%, hsl(var(--accent-orange) / 0.16), transparent 24%)",
+              "linear-gradient(135deg, hsl(var(--bg-primary)) 0%, hsl(var(--bg-primary-alt)) 54%, hsl(var(--bg-surface)) 100%)",
+            ]
+          : [
+              "radial-gradient(circle at 16% 14%, hsl(var(--accent-blue) / 0.18), transparent 24%)",
+              "radial-gradient(circle at 82% 18%, hsl(258 78% 66% / 0.15), transparent 21%)",
+              "radial-gradient(circle at 66% 82%, hsl(var(--accent-orange) / 0.16), transparent 22%)",
+              "linear-gradient(135deg, hsl(var(--bg-primary)) 0%, hsl(var(--bg-primary-alt)) 56%, hsl(var(--bg-surface)) 100%)",
+            ]
+      ).join(", "),
+    [theme],
+  );
+
+  const maskedPatternGradient = useMemo(
+    () =>
+      theme === "dark"
+        ? "linear-gradient(125deg, hsl(var(--accent-blue) / 0.98) 6%, hsl(259 86% 72% / 0.74) 46%, hsl(var(--accent-orange) / 0.58) 100%)"
+        : "linear-gradient(125deg, hsl(var(--accent-blue) / 0.84) 8%, hsl(258 80% 66% / 0.6) 48%, hsl(var(--accent-orange) / 0.7) 96%)",
+    [theme],
+  );
 
   return (
     <div
       className="relative min-h-screen overflow-hidden bg-background text-foreground"
-      style={{
-        backgroundImage: [
-          "radial-gradient(circle at 12% 18%, hsl(var(--accent-blue) / 0.22), transparent 28%)",
-          "radial-gradient(circle at 82% 20%, hsl(var(--accent-orange) / 0.14), transparent 24%)",
-          "radial-gradient(circle at 72% 78%, hsl(var(--accent-pink) / 0.14), transparent 26%)",
-          "linear-gradient(135deg, hsl(var(--bg-primary)) 0%, hsl(var(--bg-primary-alt)) 52%, hsl(var(--bg-surface)) 100%)",
-        ].join(", "),
-      }}
+      style={{ backgroundImage: pageBackgroundImage }}
     >
       <ApiErrorReporter error={loginMutation.error} title="登录失败" source="auth" />
 
       <div
-        className="pointer-events-none absolute inset-0 opacity-60"
+        className="pointer-events-none absolute inset-0 opacity-55"
         style={{
           backgroundImage: [
-            "linear-gradient(hsl(var(--border) / 0.22) 1px, transparent 1px)",
-            "linear-gradient(90deg, hsl(var(--border) / 0.22) 1px, transparent 1px)",
+            "linear-gradient(hsl(var(--border) / 0.18) 0.0625rem, transparent 0.0625rem)",
+            "linear-gradient(90deg, hsl(var(--border) / 0.18) 0.0625rem, transparent 0.0625rem)",
           ].join(", "),
-          backgroundSize: "2.75rem 2.75rem",
-          maskImage: "linear-gradient(180deg, rgba(0,0,0,0.9), rgba(0,0,0,0.35))",
+          backgroundSize: "3.25rem 3.25rem",
+          maskImage: "linear-gradient(180deg, rgba(0,0,0,0.9), rgba(0,0,0,0.3))",
         }}
       />
-      <div className="pointer-events-none absolute left-[12%] top-[14%] size-56 rounded-full bg-primary/20 blur-[100px]" />
-      <div className="pointer-events-none absolute bottom-[10%] right-[8%] size-72 rounded-full bg-warning/20 blur-[120px]" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1280px] items-center px-4 py-6 sm:px-6 lg:px-8">
-        <div className="grid w-full gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(24rem,27rem)] lg:items-stretch">
-          <section className="relative overflow-hidden rounded-[2rem] border border-border/60 bg-[linear-gradient(180deg,hsl(var(--bg-surface-elevated)/0.74),hsl(var(--bg-surface)/0.52))] p-6 shadow-console backdrop-blur-xl sm:p-8 lg:p-10">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,hsl(var(--accent-blue)/0.15),transparent_28%),linear-gradient(180deg,transparent,transparent_58%,hsl(var(--border)/0.1))]" />
-            <div className="relative flex h-full flex-col justify-between gap-8">
-              <div className="max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/50 px-3 py-1.5 text-[11px] uppercase tracking-[0.28em] text-muted-foreground shadow-console">
-                  <Bug className="size-3.5 text-primary" />
-                  <span>Protocol Fuzz Console</span>
-                </div>
+      <div
+        className="pointer-events-none absolute inset-y-0 left-0 hidden w-[58%] lg:block"
+        style={{
+          background: maskedPatternGradient,
+          WebkitMaskImage: "url(/page-backgrounds/login-background.svg)",
+          maskImage: "url(/page-backgrounds/login-background.svg)",
+          WebkitMaskRepeat: "no-repeat",
+          maskRepeat: "no-repeat",
+          WebkitMaskPosition: "left center",
+          maskPosition: "left center",
+          WebkitMaskSize: "contain",
+          maskSize: "contain",
+          opacity: theme === "dark" ? 0.42 : 0.36,
+          filter: theme === "dark" ? "saturate(1.16) brightness(1.08)" : "saturate(1.08) brightness(1.02)",
+        }}
+      />
+      <div className="pointer-events-none absolute left-[8%] top-[14%] size-[22rem] rounded-full bg-primary/14 blur-[7rem]" />
+      <div className="pointer-events-none absolute right-[10%] top-[12%] size-[18rem] rounded-full bg-warning/12 blur-[6.5rem]" />
+      <div className="pointer-events-none absolute bottom-[8%] left-1/2 size-[24rem] -translate-x-1/2 rounded-full bg-primary/10 blur-[8.5rem]" />
 
-                <div className="mt-6 space-y-5">
-                  <h1 className="max-w-3xl text-[clamp(2.5rem,4vw,4.35rem)] font-semibold leading-[1.02] tracking-tight text-foreground">
-                    ICS 协议模糊测试系统
-                  </h1>
-                  <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
-                    协议分析、风险识别、插桩处理、调试追踪，在同一现代控制面中收敛为一致的
-                    Web BFF + <span className="font-medium text-foreground">/api/v1/*</span> 主链路。
-                  </p>
-                </div>
+      <header className="absolute inset-x-0 top-0 z-20">
+        <div className="flex w-full items-center justify-between px-[2.35vw] pt-[2.6vh]">
+          <div className="flex items-center gap-[0.65rem]">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className={topCircleButtonClass}
+              onClick={() => navigate("/")}
+              aria-label="返回系统首页"
+              title="返回系统首页"
+            >
+              <Home className={topHomeIconClass} />
+            </Button>
 
-                <div className="mt-8 flex flex-wrap gap-3">
-                  <div className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-sm text-primary">
-                    Control Plane Ready
-                  </div>
-                  <div className="rounded-full border border-border/70 bg-background/50 px-3 py-1.5 text-sm text-muted-foreground">
-                    Compat Removed
-                  </div>
-                  <div className="rounded-full border border-border/70 bg-background/50 px-3 py-1.5 text-sm text-muted-foreground">
-                    Security-Centered Workflow
-                  </div>
-                </div>
+            <div className={topBrandPillClass}>
+              <div className="flex size-[1.88rem] items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
+                <ShieldCheck className="size-[1.38rem]" />
               </div>
-
-              <div className="grid gap-4 md:auto-rows-fr md:grid-cols-3">
-                {capabilityCards.map((item) => {
-                  const Icon = item.icon;
-
-                  return (
-                    <div
-                      key={item.title}
-                      className={cn(
-                        "relative h-full overflow-hidden rounded-[1.4rem] border border-border/70 bg-background/58 p-4 shadow-console backdrop-blur-xl transition-colors",
-                      )}
-                    >
-                      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,hsl(var(--accent-blue)/0.12),transparent_35%)]" />
-                      <div className="relative">
-                        <div className="flex size-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
-                          <Icon className="size-5" />
-                        </div>
-                        <p className="mt-4 text-sm font-semibold tracking-wide text-foreground">{item.title}</p>
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.description}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <span className="text-[0.82rem] font-semibold uppercase tracking-[0.24em] text-foreground/90">ICP Fuzz</span>
             </div>
-          </section>
+          </div>
 
-          <div className="flex items-center justify-center lg:justify-end">
-            <Card className="relative w-full max-w-[27rem] overflow-hidden border-border/70 bg-[linear-gradient(180deg,hsl(var(--bg-surface-elevated)/0.92),hsl(var(--bg-surface)/0.84))] shadow-[0_30px_90px_hsl(var(--shadow)/0.18)] backdrop-blur-2xl">
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/45 to-transparent" />
-              <CardHeader className="relative pb-4">
-                <div className="mb-3 flex size-12 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-console">
-                  <ShieldCheck className="size-5" />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className={cn(topCircleButtonClass, "shrink-0")}
+            onClick={toggleTheme}
+            aria-label="切换主题"
+            title="切换主题"
+          >
+            {theme === "dark" ? <SunMedium className={topThemeIconClass} /> : <MoonStar className={topThemeIconClass} />}
+          </Button>
+        </div>
+      </header>
+
+      <main className="relative z-10 grid min-h-screen place-items-center px-[4vw]">
+        <div className="relative flex w-full max-w-[clamp(20.25rem,26vw,23.75rem)] items-center justify-center">
+          <div className="pointer-events-none absolute inset-x-[8%] top-1/2 h-[36%] -translate-y-1/2 rounded-full bg-primary/12 blur-3xl" />
+
+          <Card className="relative w-full overflow-hidden rounded-[2rem] border-border/70 bg-[linear-gradient(180deg,hsl(var(--bg-surface-elevated)/0.94),hsl(var(--bg-surface)/0.86))] shadow-[0_2rem_5rem_hsl(var(--shadow)/0.18)] backdrop-blur-2xl">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/45 to-transparent" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.34),transparent_22%)] dark:bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_22%)]" />
+
+            <CardContent className="relative px-[clamp(1.6rem,5.4vw,2.45rem)] pt-[clamp(1.48rem,4.2vh,2.08rem)] pb-[clamp(3.6rem,5.9vh,3.95rem)]">
+              <div className="mx-auto w-full max-w-[19.25rem] space-y-[clamp(0.85rem,1.85vh,1.2rem)]">
+                <div className="space-y-[clamp(3.55rem,5.9vh,3.9rem)] text-center">
+                  <p className="text-[0.72rem] uppercase tracking-[0.32em] text-muted-foreground">Console Access</p>
+
+                  <div className="flex flex-col items-center gap-[0.8rem]">
+                    <div className="flex size-[4.35rem] items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-[1.55rem] font-semibold text-primary shadow-console">
+                      {avatarInitial}
+                    </div>
+                    <p className="text-[1.4rem] font-medium tracking-[0.06em] text-foreground">登录</p>
+                  </div>
                 </div>
-                <CardTitle className="flex items-center gap-2 text-[1.6rem] tracking-tight">
-                  登录控制面
-                </CardTitle>
-                <CardDescription className="max-w-sm leading-6">
-                  登录 Web BFF 后，浏览器仅持有 HttpOnly session。其余节点能力统一收敛到签名鉴权的 /api/v1/*。
-                </CardDescription>
-              </CardHeader>
 
-              <CardContent className="relative space-y-5">
                 <form
-                  className="space-y-4"
+                  className="space-y-0"
                   onSubmit={(event) => {
                     event.preventDefault();
                     loginMutation.mutate();
                   }}
                 >
-                  <FormField label="用户名">
-                    <Input
-                      value={username}
-                      onChange={(event) => setUsername(event.target.value)}
-                      autoComplete="username"
-                      placeholder="输入控制台用户名"
-                    />
-                  </FormField>
+                  <div className="space-y-[1rem]">
+                    <FormField label="用户名">
+                      <Input
+                        className="h-[clamp(2.7rem,4.4vh,2.95rem)] rounded-full px-[1rem]"
+                        value={username}
+                        onChange={(event) => setUsername(event.target.value)}
+                        autoComplete="username"
+                        placeholder="输入控制台用户名"
+                      />
+                    </FormField>
 
-                  <FormField label="密码">
-                    <Input
-                      type="password"
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      autoComplete="current-password"
-                      placeholder="输入当前密码"
-                    />
-                  </FormField>
-
-                  <Button className="h-11 w-full justify-between rounded-[var(--radius-xl)] px-4" disabled={loginMutation.isPending}>
-                    <span>{loginMutation.isPending ? "登录中..." : "登录"}</span>
-                    <ArrowRight className="size-4" />
-                  </Button>
-                </form>
-
-                <div className="rounded-[1.25rem] border border-border/70 bg-background/55 p-4 text-sm text-muted-foreground">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
-                      <LockKeyhole className="size-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-foreground">安全说明</p>
-                      <p className="mt-1 leading-6">
-                        登录边界保持服务端 scrypt、HttpOnly session 与 CSRF。系统已删除 compat 旧接口，不再保留旁路访问。
-                      </p>
-                    </div>
+                    <FormField label="密码">
+                      <Input
+                        className="h-[clamp(2.7rem,4.4vh,2.95rem)] rounded-full px-[1rem]"
+                        type="password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        autoComplete="current-password"
+                        placeholder="输入当前密码"
+                      />
+                    </FormField>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+
+                  <div className="flex justify-center pt-[clamp(3.55rem,5.9vh,3.9rem)]">
+                    <Button
+                      type="submit"
+                      size="icon"
+                      className="size-[clamp(3.7rem,6.2vh,4.2rem)] rounded-full bg-primary text-primary-foreground shadow-console transition-transform hover:scale-[1.03] hover:bg-[hsl(var(--accent-blue-hover))] [&_svg]:text-primary-foreground"
+                      disabled={loginMutation.isPending}
+                      aria-label={loginMutation.isPending ? "登录中" : "登录"}
+                      title={loginMutation.isPending ? "登录中" : "登录"}
+                    >
+                      <ArrowRight className="size-[1.62rem]" />
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
