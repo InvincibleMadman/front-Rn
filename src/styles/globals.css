@@ -885,8 +885,8 @@
 
   .dark .settings-hero-meter__fill {
     background:
-      linear-gradient(90deg, hsl(var(--accent-blue) / 0.94), hsl(var(--accent-pink) / 0.9));
-    box-shadow: 0 0 24px hsl(var(--accent-blue) / 0.24);
+      linear-gradient(90deg, #fff7ff 0%, #f2b2ff 34%, #9a7cff 68%, #6ea8ff 100%);
+    box-shadow: 0 0 24px rgb(110 168 255 / 0.24);
   }
 
   .settings-hero-meter__segments {
@@ -1054,12 +1054,12 @@
   .dark .settings-tab-pill--active,
   .dark .settings-tab-pill[data-active="true"] {
     background:
-      linear-gradient(180deg, hsl(var(--primary) / 0.96), hsl(var(--accent-pink) / 0.72));
+      linear-gradient(145deg, #efe5ff 0%, #d894f0 34%, #8566ea 68%, #5e92e3 100%);
     box-shadow:
       inset 0 0 0 1px hsl(0 0% 100% / 0.14),
       inset 0 1px 0 hsl(0 0% 100% / 0.14),
-      0 0 0 1px hsl(var(--primary) / 0.18),
-      0 18px 34px hsl(var(--primary) / 0.24);
+      0 0 0 1px rgb(133 102 234 / 0.2),
+      0 18px 34px rgb(94 146 227 / 0.24);
   }
 
   .settings-tab-pill__icon {
