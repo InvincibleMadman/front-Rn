@@ -5,6 +5,7 @@ import type {
   DebugLiveSession,
   DebugLocal,
   DebugOutputStreams,
+  DebugPrepStep,
   DebugRegister,
   DebugSession,
   DebugSessionRequest,
@@ -59,6 +60,13 @@ export function initialLaunchForm(): DebugLaunchFormState {
     ready_check_json: "{}",
     kb_entry_ids_text: "",
     source_doc_ids_text: "",
+    replay_mode: "builtin_transport",
+    replay_script_ref: "",
+    replay_runtime: "python3",
+    replay_args_text: "",
+    replay_env_json: "{}",
+    replay_timeout: "10",
+    prep_steps_text: "",
   };
 }
 
@@ -84,7 +92,7 @@ export function emptyToUndefined(value: string): string | undefined {
 
 export function splitTextList(value: string): string[] {
   return value
-    .split(/\r?\n|,/) 
+    .split(/\r?\n|,/)
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -113,6 +121,33 @@ export function candidateToRequest(candidate?: DebugCandidate | null): DebugSess
     : undefined);
 }
 
+function stringifyPrepSteps(steps?: DebugPrepStep[]): string {
+  if (!steps?.length) return "";
+  return steps.map((step) => JSON.stringify(step)).join("\n");
+}
+
+function parsePrepSteps(text: string): DebugPrepStep[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      if (line.startsWith("{")) {
+        const parsed = parseJsonObject(line);
+        const argv = Array.isArray(parsed.argv) ? parsed.argv.map((item) => String(item)).filter(Boolean) : [];
+        return {
+          argv,
+          cwd: typeof parsed.cwd === "string" ? parsed.cwd : undefined,
+          env: parsed.env && typeof parsed.env === "object" && !Array.isArray(parsed.env)
+            ? Object.fromEntries(Object.entries(parsed.env as Record<string, unknown>).map(([key, value]) => [key, String(value)]))
+            : undefined,
+        } satisfies DebugPrepStep;
+      }
+      return { argv: parseCommandInput(line) } satisfies DebugPrepStep;
+    })
+    .filter((item) => item.argv.length);
+}
+
 export function formFromRequest(request?: DebugSessionRequest): Partial<DebugLaunchFormState> {
   if (!request) return {};
   return {
@@ -137,6 +172,10 @@ export function applyFormDraft(current: DebugLaunchFormState, draft?: Partial<De
 }
 
 export function buildCreatePayload(protocol: string, form: DebugLaunchFormState, base?: Partial<DebugSessionRequest>): DebugSessionRequest {
+  const replayMode = form.replay_mode === "script" ? "script" : "builtin_transport";
+  const replayArgs = parseCommandInput(form.replay_args_text);
+  const replayEnv = Object.fromEntries(Object.entries(parseJsonObject(form.replay_env_json)).map(([key, value]) => [key, String(value)]));
+  const prepSteps = parsePrepSteps(form.prep_steps_text);
   return {
     operation_id: base?.operation_id,
     protocol: protocol.trim(),
@@ -159,6 +198,15 @@ export function buildCreatePayload(protocol: string, form: DebugLaunchFormState,
       startup_timeout: Number(form.startup_timeout || 3),
       ready_check: parseJsonObject(form.ready_check_json),
     },
+    replay: replayMode === "script" ? {
+      mode: "script",
+      script_ref: emptyToUndefined(form.replay_script_ref),
+      runtime: form.replay_runtime,
+      args: replayArgs,
+      env: replayEnv,
+      timeout_sec: Number(form.replay_timeout || 10),
+    } : { mode: "builtin_transport" },
+    prep_steps: prepSteps,
   };
 }
 

@@ -103,6 +103,13 @@ export function DebugView(): JSX.Element {
     retry: 0,
   });
 
+  const replayScriptsQuery = useQuery({
+    queryKey: ["debug-replay-scripts", ui.protocol],
+    queryFn: () => assetsApi.getWorkspaceTree(ui.protocol, "debug_replay_scripts", "/"),
+    enabled: Boolean(ui.protocol),
+    retry: 0,
+  });
+
   const historyQuery = useQuery({
     queryKey: ["debug-history", ui.protocol],
     queryFn: () => debugApi.listProtocolSessions(ui.protocol),
@@ -177,6 +184,34 @@ export function DebugView(): JSX.Element {
         section: "monitor",
         activeSessionId: session.session_id,
       }));
+    },
+  });
+
+  const uploadReplayScriptMutation = useMutation({
+    mutationFn: ({ file, runtime }: { file: File; runtime: string }) => debugApi.uploadReplayScript(ui.protocol, file, runtime),
+    onSuccess: async (payload) => {
+      setUi((current) => ({
+        ...current,
+        launchForm: {
+          ...current.launchForm,
+          replay_mode: "script",
+          replay_script_ref: String(payload.workspace_ref ?? current.launchForm.replay_script_ref),
+        },
+      }));
+      await replayScriptsQuery.refetch();
+    },
+  });
+
+  const deleteReplayScriptMutation = useMutation({
+    mutationFn: (filename: string) => debugApi.deleteReplayScript(ui.protocol, filename),
+    onSuccess: async (_, filename) => {
+      setUi((current) => ({
+        ...current,
+        launchForm: current.launchForm.replay_script_ref.includes(filename)
+          ? { ...current.launchForm, replay_script_ref: "" }
+          : current.launchForm,
+      }));
+      await replayScriptsQuery.refetch();
     },
   });
 
@@ -309,6 +344,9 @@ export function DebugView(): JSX.Element {
       <ApiErrorReporter error={protocolsQuery.error} title="协议列表获取失败" source="debug" />
       <ApiErrorReporter error={candidatesQuery.error} title="调试候选获取失败" source="debug" />
       <ApiErrorReporter error={createMutation.error} title="调试会话创建失败" source="debug" />
+      <ApiErrorReporter error={replayScriptsQuery.error} title="Replay 脚本列表读取失败" source="debug" />
+      <ApiErrorReporter error={uploadReplayScriptMutation.error} title="Replay 脚本上传失败" source="debug" />
+      <ApiErrorReporter error={deleteReplayScriptMutation.error} title="Replay 脚本删除失败" source="debug" />
       <ApiErrorReporter error={sessionQuery.error} title="调试会话读取失败" source="debug" />
 
       <DebugPageHeader
@@ -338,11 +376,17 @@ export function DebugView(): JSX.Element {
           buildTargets={buildTargetsQuery.data ?? []}
           buildRuns={buildRunsQuery.data ?? []}
           launchProfiles={launchProfilesQuery.data ?? []}
+          replayScripts={(replayScriptsQuery.data?.items ?? [])
+            .filter((item) => item.type === "file")
+            .map((item) => ({ filename: item.name, workspaceRef: item.workspace_ref || `workspace://${ui.protocol}/debug_replay_scripts${item.virtual_path}`, size: item.size }))}
           form={ui.launchForm}
           onFormChange={(patch) => setUi((current) => ({ ...current, launchForm: { ...current.launchForm, ...patch } }))}
           onSubmit={submit}
           onReloadCandidates={() => void candidatesQuery.refetch()}
+          onUploadReplayScript={(file, runtime) => uploadReplayScriptMutation.mutate({ file, runtime })}
+          onDeleteReplayScript={(filename) => filename && deleteReplayScriptMutation.mutate(filename)}
           submitting={createMutation.isPending}
+          uploadingReplayScript={uploadReplayScriptMutation.isPending}
         />
       ) : null}
 

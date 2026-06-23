@@ -65,6 +65,30 @@ export interface BuildProbe {
   supported_runner_tools?: string[];
 }
 
+export interface BuildPlanCreatePayload {
+  mode: "structured" | "direct_commands";
+  protocol: string;
+  source_ref?: string;
+  source_root?: string;
+  build_root_ref?: string;
+  build_root?: string;
+  build_system?: string;
+  compiler?: string;
+  build_type?: string;
+  generator?: string;
+  build_target?: string;
+  parallelism?: number;
+  extra_cflags?: string;
+  extra_cxxflags?: string;
+  extra_ldflags?: string;
+  expected_outputs?: string[];
+  target_io_hint?: "file_or_stdin" | "network_or_server" | "unknown";
+  command_lines?: string[];
+  configure_command_text?: string;
+  build_command_text?: string;
+  post_build_commands_text?: string;
+}
+
 export interface BuildStep {
   name: string;
   cwd_ref: string;
@@ -73,6 +97,7 @@ export interface BuildStep {
 }
 
 export interface BuildPlan {
+  mode?: "structured" | "direct_commands";
   plan_id: string;
   plan_hash: string;
   protocol: string;
@@ -86,6 +111,8 @@ export interface BuildPlan {
   created_by: string;
   created_at: string;
   steps: BuildStep[];
+  expected_outputs?: Array<{ path_ref: string; name: string }>;
+  target_io_hint?: "file_or_stdin" | "network_or_server" | "unknown";
   warnings: string[];
   build_suggestions?: BuildSuggestion[];
   selected_suggestion_id?: string | null;
@@ -102,6 +129,7 @@ export interface TargetCandidate {
 }
 
 export interface BuildRun {
+  warnings?: string[];
   build_id: string;
   plan_id: string;
   protocol: string;
@@ -129,6 +157,12 @@ export interface LaunchProfile {
   afl_args: string[];
   target_cmd: string[];
   env: Record<string, string>;
+  scheduler?: string | null;
+  timeout?: string | number | null;
+  memory_limit?: string | number | null;
+  risk_enabled?: boolean;
+  risk_feedback_enabled?: boolean;
+  risk_schedule_enabled?: boolean;
   server_generated: true;
   created_by: string;
   created_at: string;

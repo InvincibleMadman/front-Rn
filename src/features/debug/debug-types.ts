@@ -28,6 +28,13 @@ export interface DebugLaunchFormState {
   ready_check_json: string;
   kb_entry_ids_text: string;
   source_doc_ids_text: string;
+  replay_mode: "builtin_transport" | "script";
+  replay_script_ref: string;
+  replay_runtime: "python3" | "bash" | "native";
+  replay_args_text: string;
+  replay_env_json: string;
+  replay_timeout: string;
+  prep_steps_text: string;
 }
 
 export interface DebugUiState {

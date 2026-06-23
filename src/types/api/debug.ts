@@ -13,6 +13,21 @@ export interface DebugTarget {
   [key: string]: unknown;
 }
 
+export interface DebugReplayConfig {
+  mode?: "builtin_transport" | "script";
+  script_ref?: string;
+  runtime?: "python3" | "bash" | "native";
+  args?: string[];
+  env?: Record<string, string>;
+  timeout_sec?: number;
+}
+
+export interface DebugPrepStep {
+  argv: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+}
+
 export interface DebugSessionRequest {
   operation_id?: string;
   protocol: string;
@@ -22,6 +37,8 @@ export interface DebugSessionRequest {
   kb_entry_ids?: string[];
   source_doc_ids?: string[];
   target: DebugTarget;
+  replay?: DebugReplayConfig;
+  prep_steps?: DebugPrepStep[];
   run_mode?: "sync" | "async";
   analysis_mode?: "locate_only" | "full";
   [key: string]: unknown;

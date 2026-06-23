@@ -25,6 +25,8 @@ export interface JobCreateRequest {
   workers?: number;
   scheduler?: string;
   risk_enabled?: boolean;
+  risk_feedback_enabled?: boolean;
+  risk_schedule_enabled?: boolean;
   node_name?: string;
   notes?: string;
   dry_run?: boolean;
@@ -198,6 +200,8 @@ export interface JobRuntimeSummary {
   workers?: number;
   scheduler?: string;
   risk_enabled?: boolean;
+  risk_feedback_enabled?: boolean;
+  risk_schedule_enabled?: boolean;
   node_name?: string;
   timeout_sec?: number | null;
   transport_type?: string | null;
@@ -219,6 +223,8 @@ export interface JobsMonitorItem {
   node_name?: string;
   scheduler?: string;
   risk_enabled?: boolean;
+  risk_feedback_enabled?: boolean;
+  risk_schedule_enabled?: boolean;
   updated_at?: string;
   execs_done?: number;
   bitmap_cvg?: number;

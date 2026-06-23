@@ -91,4 +91,19 @@ export const debugApi = {
     const response = await apiClient.requestEnvelope<DebugSummary>(`/api/v1/protocols/${encodeURIComponent(protocol)}/debug/summary`);
     return response.data;
   },
+  uploadReplayScript: async (protocol: string, file: File, runtime: string): Promise<Record<string, unknown>> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("runtime", runtime);
+    const response = await apiClient.requestEnvelope<Record<string, unknown>>(`/api/v1/protocols/${encodeURIComponent(protocol)}/debug/replay-scripts/upload`, {
+      method: "POST",
+      body: formData,
+    });
+    return response.data;
+  },
+  deleteReplayScript: async (protocol: string, filename: string): Promise<void> => {
+    await apiClient.requestEnvelope(`/api/v1/protocols/${encodeURIComponent(protocol)}/debug/replay-scripts/${encodeURIComponent(filename)}`, {
+      method: "DELETE",
+    });
+  },
 };

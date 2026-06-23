@@ -1,7 +1,7 @@
 import { apiClient } from "@/lib/api/client";
 import { resolveNodeApiPath } from "@/lib/api/url";
 import { useAuthStore } from "@/stores/auth-store";
-import type { BuildPlan, BuildProbe, BuildRun, LaunchProfile, TargetCandidate } from "@/types/api/build-assistant";
+import type { BuildPlan, BuildPlanCreatePayload, BuildProbe, BuildRun, LaunchProfile, TargetCandidate } from "@/types/api/build-assistant";
 
 function nodeApiPath(path: string): string {
   return resolveNodeApiPath(`/api/v1${path}`);
@@ -20,7 +20,7 @@ export const buildAssistantApi = {
     return response.data;
   },
 
-  async createPlan(protocol: string, payload: Record<string, unknown>): Promise<BuildPlan> {
+  async createPlan(protocol: string, payload: BuildPlanCreatePayload | Record<string, unknown>): Promise<BuildPlan> {
     const response = await apiClient.requestEnvelope<BuildPlan>(nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/build/plans`), {
       method: "POST",
       credentials: "include",

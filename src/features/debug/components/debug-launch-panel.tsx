@@ -1,4 +1,5 @@
-import { Bug, FileCode2, FolderCog, Play, RefreshCw, Wand2 } from "lucide-react";
+import { useState } from "react";
+import { Bug, FileCode2, FolderCog, Play, RefreshCw, Upload, Wand2 } from "lucide-react";
 import { FormField } from "@/components/common/form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,12 @@ function SectionTitle({ title, desc }: { title: string; desc: string }): JSX.Ele
   );
 }
 
+export interface ReplayScriptOption {
+  filename: string;
+  workspaceRef: string;
+  size?: number | null;
+}
+
 export function DebugLaunchPanel({
   protocol,
   protocols,
@@ -39,11 +46,15 @@ export function DebugLaunchPanel({
   buildTargets,
   buildRuns,
   launchProfiles,
+  replayScripts,
   form,
   onFormChange,
   onSubmit,
   onReloadCandidates,
+  onUploadReplayScript,
+  onDeleteReplayScript,
   submitting,
+  uploadingReplayScript,
 }: {
   protocol: string;
   protocols: string[];
@@ -58,14 +69,19 @@ export function DebugLaunchPanel({
   buildTargets: TargetCandidate[];
   buildRuns: BuildRun[];
   launchProfiles: LaunchProfile[];
+  replayScripts: ReplayScriptOption[];
   form: DebugLaunchFormState;
   onFormChange: (patch: Partial<DebugLaunchFormState>) => void;
   onSubmit: () => void;
   onReloadCandidates: () => void;
+  onUploadReplayScript: (file: File, runtime: string) => void;
+  onDeleteReplayScript: (filename: string) => void;
   submitting?: boolean;
+  uploadingReplayScript?: boolean;
 }): JSX.Element {
   const protocolJobs = jobs.filter((job) => !protocol || job.protocol === protocol);
   const selectedCandidate = candidates.find((item) => (item.seed_path || item.path || "") === selectedCandidatePath) ?? null;
+  const [pendingReplayFile, setPendingReplayFile] = useState<File | null>(null);
 
   return (
     <div className="grid gap-4 xl:grid-cols-[24rem_minmax(0,1fr)]">
@@ -176,6 +192,17 @@ export function DebugLaunchPanel({
                 </div>
               </div>
             </div>
+            <div className="rounded-lg border border-border bg-background px-3 py-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-primary">
+                  <Upload className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Replay Scripts</p>
+                  <p className="text-xs text-muted-foreground">{replayScripts.length} 个脚本可复用</p>
+                </div>
+              </div>
+            </div>
             {selectedCandidate ? (
               <div className="rounded-lg border border-primary/25 bg-primary/8 px-3 py-3 text-xs leading-6 text-foreground">
                 已选 candidate：{selectedCandidate.artifact_id || selectedCandidate.name || "candidate"}
@@ -187,7 +214,7 @@ export function DebugLaunchPanel({
 
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="mb-4 flex items-start justify-between gap-3">
-          <SectionTitle title="启动表单" desc="保留工程参数视图，但改成更像 IDE 的矩形工作区。" />
+          <SectionTitle title="启动表单" desc="保留工程参数视图，并补上协议专用 replay 脚本能力。" />
           <Button type="button" onClick={onSubmit} disabled={submitting} className="rounded-lg">
             <Play className="h-4 w-4" />
             发起调试
@@ -235,6 +262,83 @@ export function DebugLaunchPanel({
           <FormField label="source_doc_ids" className="xl:col-span-2">
             <Textarea rows={2} value={form.source_doc_ids_text} onChange={(e) => onFormChange({ source_doc_ids_text: e.target.value })} />
           </FormField>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-border/60 bg-background/55 p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <SectionTitle title="Replay 区块" desc="builtin transport 继续沿用现有 transport 字段；script 模式用于先启动服务再发包复现。" />
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <FormField label="replay_mode">
+              <Select value={form.replay_mode} onValueChange={(value) => onFormChange({ replay_mode: value as DebugLaunchFormState["replay_mode"] })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="builtin_transport">builtin_transport</SelectItem>
+                  <SelectItem value="script">script</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="replay_timeout">
+              <Input value={form.replay_timeout} onChange={(e) => onFormChange({ replay_timeout: e.target.value })} />
+            </FormField>
+
+            {form.replay_mode === "script" ? (
+              <>
+                <FormField label="replay_runtime">
+                  <Select value={form.replay_runtime} onValueChange={(value) => onFormChange({ replay_runtime: value as DebugLaunchFormState["replay_runtime"] })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="python3">python3</SelectItem>
+                      <SelectItem value="bash">bash</SelectItem>
+                      <SelectItem value="native">native</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormField>
+                <FormField label="replay_script_ref">
+                  <Select value={form.replay_script_ref || "__none__"} onValueChange={(value) => onFormChange({ replay_script_ref: value === "__none__" ? "" : value })}>
+                    <SelectTrigger><SelectValue placeholder="选择已有脚本" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">未选择</SelectItem>
+                      {replayScripts.map((item) => <SelectItem key={item.workspaceRef} value={item.workspaceRef}>{item.filename}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+                <FormField label="replay_args_text">
+                  <Input value={form.replay_args_text} onChange={(e) => onFormChange({ replay_args_text: e.target.value })} placeholder="--host 127.0.0.1 --port 102" />
+                </FormField>
+                <FormField label="选择并上传 replay 脚本">
+                  <div className="space-y-2">
+                    <Input type="file" onChange={(event) => setPendingReplayFile(event.target.files?.[0] ?? null)} />
+                    <div className="flex gap-2">
+                      <Button type="button" variant="secondary" disabled={!pendingReplayFile || uploadingReplayScript} onClick={() => { if (pendingReplayFile) onUploadReplayScript(pendingReplayFile, form.replay_runtime); }}>
+                        <Upload className="h-4 w-4" />
+                        {uploadingReplayScript ? "上传中..." : "上传脚本"}
+                      </Button>
+                      {form.replay_script_ref ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => onDeleteReplayScript((replayScripts.find((item) => item.workspaceRef === form.replay_script_ref)?.filename) || "")}
+                        >
+                          删除当前脚本
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </FormField>
+                <FormField label="replay_env_json" className="xl:col-span-2">
+                  <Textarea rows={4} value={form.replay_env_json} onChange={(e) => onFormChange({ replay_env_json: e.target.value })} />
+                </FormField>
+                <FormField label="prep_steps_text" className="xl:col-span-2" description="支持一行一条命令，或一行一个 JSON 对象。">
+                  <Textarea rows={5} value={form.prep_steps_text} onChange={(e) => onFormChange({ prep_steps_text: e.target.value })} placeholder={"python3 -c \"print('prep ok')\"\n{\"argv\":[\"bash\",\"hook.sh\"],\"cwd\":\"/tmp/demo\"}"} />
+                </FormField>
+              </>
+            ) : (
+              <div className="xl:col-span-2 rounded-lg border border-border bg-background px-3 py-3 text-sm text-muted-foreground">
+                当前使用 builtin_transport，会沿用 transport_type / transport_config 作为回放方式。
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">

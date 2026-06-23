@@ -46,8 +46,11 @@ export function jobScheduler(job?: Job | null): string {
 
 export function jobRiskEnabled(job?: Job | null): boolean {
   const metadata = jobMetadata(job);
+  const request = jobRequest(job);
+  const requestRiskFeedback = typeof request.risk_feedback_enabled === "boolean" ? request.risk_feedback_enabled : undefined;
   const metaRisk = typeof metadata.risk_enabled === "boolean" ? metadata.risk_enabled : undefined;
-  return jobBoolean(job, "risk_enabled") ?? metaRisk ?? false;
+  const metaRiskFeedback = typeof metadata.risk_feedback_enabled === "boolean" ? metadata.risk_feedback_enabled : undefined;
+  return jobBoolean(job, "risk_enabled") ?? requestRiskFeedback ?? metaRisk ?? metaRiskFeedback ?? false;
 }
 
 export function jobTargetBinary(job?: Job | null): string {

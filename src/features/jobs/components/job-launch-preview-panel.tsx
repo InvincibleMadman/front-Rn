@@ -1,7 +1,15 @@
 import { AlertCircle, CheckCircle2, TerminalSquare, Wrench } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { JsonViewer } from "@/components/common/json-viewer";
-import type { JobCreateRequest } from "@/types/api/jobs";
+
+export interface BuildPreviewDetails {
+  mode: "structured" | "direct_commands";
+  steps: Array<{ title: string; cwd?: string; command: string }>;
+  acceptedCommandLines: string[];
+  droppedLines: Array<{ line: string; reason: string }>;
+  expectedOutputs: string[];
+  targetIoHint?: string;
+}
 
 export function JobLaunchPreviewPanel({
   payload,
@@ -9,12 +17,14 @@ export function JobLaunchPreviewPanel({
   profileSummary,
   commandBlocks = [],
   assistantNotes = [],
+  buildPreview,
 }: {
-  payload: JobCreateRequest;
+  payload: unknown;
   warnings: string[];
   profileSummary: Array<{ label: string; value: string }>;
   commandBlocks?: Array<{ title: string; command: string; env?: string; note?: string }>;
   assistantNotes?: string[];
+  buildPreview?: BuildPreviewDetails;
 }): JSX.Element {
   return (
     <div className="sticky top-[calc(var(--topbar-h)+1rem)] space-y-4">
@@ -49,6 +59,54 @@ export function JobLaunchPreviewPanel({
           )}
         </CardContent>
       </Card>
+      {buildPreview ? (
+        <Card className="card-surface">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Build 提交预览</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="rounded-[var(--radius-lg)] border border-border/60 bg-background/55 px-3 py-2">
+              <span className="text-muted-foreground">mode：</span>
+              <span className="font-medium">{buildPreview.mode}</span>
+              <span className="ml-3 text-muted-foreground">target io：</span>
+              <span className="font-medium">{buildPreview.targetIoHint || "unknown"}</span>
+            </div>
+            {buildPreview.steps.length ? (
+              <div className="space-y-2">
+                {buildPreview.steps.map((item) => (
+                  <div key={`${item.title}-${item.command}`} className="rounded-[var(--radius-lg)] border border-border/60 bg-background/55 p-3 text-xs text-muted-foreground">
+                    <p className="font-medium text-foreground">{item.title}</p>
+                    {item.cwd ? <p className="mt-2 break-all">cwd: {item.cwd}</p> : null}
+                    <p className="mt-2 break-all font-mono text-foreground">{item.command}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {buildPreview.acceptedCommandLines.length ? (
+              <div className="rounded-[var(--radius-lg)] border border-border/60 bg-background/55 p-3 text-xs">
+                <p className="font-medium text-foreground">直接命令模式将发送的 command_lines</p>
+                <div className="mt-2 space-y-1 text-muted-foreground">
+                  {buildPreview.acceptedCommandLines.map((line) => <div key={line} className="break-all font-mono text-foreground">{line}</div>)}
+                </div>
+              </div>
+            ) : null}
+            {buildPreview.droppedLines.length ? (
+              <div className="rounded-[var(--radius-lg)] border border-warning/25 bg-warning/10 p-3 text-xs text-warning-foreground">
+                <p className="font-medium">被丢弃的非法命令 {buildPreview.droppedLines.length} 条</p>
+                <div className="mt-2 space-y-1">
+                  {buildPreview.droppedLines.map((item) => <div key={`${item.line}-${item.reason}`} className="break-all">{item.line} · {item.reason}</div>)}
+                </div>
+              </div>
+            ) : null}
+            <div className="rounded-[var(--radius-lg)] border border-border/60 bg-background/55 p-3 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground">expected outputs</p>
+              <div className="mt-2 space-y-1">
+                {buildPreview.expectedOutputs.length ? buildPreview.expectedOutputs.map((item) => <div key={item} className="break-all">{item}</div>) : <div>当前未填写。</div>}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
       <Card className="card-surface">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base"><TerminalSquare className="size-4.5" /> 服务端 / 侧栏命令建议</CardTitle>
