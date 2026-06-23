@@ -40,3 +40,12 @@ Thumbs.db
 !.vscode/settings.example.json
 
 .codex/
+yarn.lock
+yarn-error.log
+.parallelperf.*
+tests/baselines/reference/dt
+.failed-tests
+TEST-results.xml
+package-lock.json
+.eslintcache
+*v8.log
