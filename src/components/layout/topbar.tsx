@@ -12,18 +12,23 @@ export function Topbar(): JSX.Element {
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
   const selectedNodeId = useUiStore((state) => state.selectedApiNodeId);
 
+  const hasSelectedNode = Boolean(selectedNodeId?.trim());
+
   const backendHealthQuery = useQuery({
-    queryKey: ["backend-health", selectedNodeId ?? "local"],
+    queryKey: ["backend-health", selectedNodeId || "none"],
     queryFn: systemApi.getSystemInfo,
     retry: 0,
     refetchInterval: 15_000,
+    enabled: hasSelectedNode,
   });
 
-  const statusLabel = backendHealthQuery.data
-    ? "节点在线"
-    : backendHealthQuery.isError
-      ? "节点离线"
-      : "节点检测中";
+  const statusLabel = !hasSelectedNode
+    ? "未选择节点"
+    : backendHealthQuery.data
+      ? "节点在线"
+      : backendHealthQuery.isPending
+        ? "节点检测中"
+        : "节点离线";
 
   return (
     <header
