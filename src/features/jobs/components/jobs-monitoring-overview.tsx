@@ -165,7 +165,7 @@ function AlertTimelineStrip({ items }: { items: JobsActivity["alert_timeline"] }
     <div className="space-y-2">
       {items.slice(0, 8).map((item, index) => (
         <div key={`${item.kind ?? "event"}-${index}`} className="rounded-[var(--radius-lg)] border border-border/60 bg-background/60 px-3 py-2 text-sm">
-          <div className="flex items-center justify-between gap-3"><span>{item.message ?? item.kind}</span><span className="text-xs text-muted-foreground">{formatDateTime(item.time)}</span></div>
+          <div className="flex items-center justify-between gap-3"><span>{item.message ?? item.kind}</span><span className="text-xs text-muted-foreground">{formatDateTime(item.time ?? item.at)}</span></div>
         </div>
       ))}
     </div>

@@ -1,13 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { VulnSummaryResponse } from "@/types/api/vuln-history";
+import type { VulnSummary } from "@/types/api/vuln-history";
 
-export function VulnClosureStatusPanel({ summary }: { summary?: VulnSummaryResponse }): JSX.Element {
+export function VulnClosureStatusPanel({ summary }: { summary?: VulnSummary }): JSX.Element {
+  const closure = summary?.closure_status ?? {};
   const items = [
-    { label: "已关联 crash", value: summary?.closure.linked_crash ?? 0 },
-    { label: "已关联 debug", value: summary?.closure.linked_debug ?? 0 },
-    { label: "已归档", value: summary?.closure.archived ?? 0 },
-    { label: "缺 GDB", value: summary?.closure.missing_debug ?? 0 },
-    { label: "缺 artifact", value: summary?.closure.missing_artifact ?? 0 },
+    { label: "已关联 crash", value: Number(closure.linked_crash ?? summary?.linked_crash ?? 0) },
+    { label: "已关联 debug", value: Number(closure.linked_debug ?? summary?.linked_debug ?? 0) },
+    { label: "已归档", value: Number(closure.archived ?? summary?.archived ?? 0) },
+    { label: "缺 GDB", value: Number(closure.missing_debug ?? 0) },
+    { label: "缺 artifact", value: Number(closure.missing_artifact ?? 0) },
   ];
   const total = Math.max(summary?.total ?? 0, 1);
   return (

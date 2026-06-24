@@ -6,7 +6,7 @@ import { JsonViewer } from "@/components/common/json-viewer";
 import { StatusBadge } from "@/components/common/status-badge";
 import { normalizeApiError, formatApiError, type ApiErrorPayload } from "@/lib/api/errors";
 import { cn } from "@/lib/utils/cn";
-import { reportGlobalError } from "@/components/common/global-error-center";
+import { reportGlobalError } from "@/components/common/global-error-report";
 
 function buildReportKey(payload: ApiErrorPayload, title: string, source?: string): string {
   return JSON.stringify({

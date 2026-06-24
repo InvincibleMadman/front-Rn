@@ -248,6 +248,7 @@ export interface JobsAlertItem {
   kind?: string;
   message?: string;
   at?: string;
+  time?: string;
 }
 
 export interface JobsTrendPoint {

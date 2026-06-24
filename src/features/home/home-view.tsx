@@ -414,10 +414,10 @@ function useDeckRotation(
 }
 
 function useFullyVisibleSection<T extends HTMLElement>(threshold = 0.92): {
-  ref: RefObject<T | null>;
+  ref: RefObject<T>;
   fullyVisible: boolean;
 } {
-  const ref = useRef<T>(null);
+  const ref = useRef<T>(null!);
   const [fullyVisible, setFullyVisible] = useState(false);
 
   useEffect(() => {

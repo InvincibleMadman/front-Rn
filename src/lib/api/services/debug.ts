@@ -7,6 +7,7 @@ import type {
   DebugSessionRequest,
   DebugSummary,
 } from "@/types/api/debug";
+import type { OperationLogTail } from "@/types/api/operations";
 
 type DebugCandidateListResponse = DebugCandidate[] | { items?: DebugCandidate[]; candidates?: DebugCandidate[] };
 type DebugSessionListResponse = DebugSession[] | { items?: DebugSession[]; sessions?: DebugSession[] };
@@ -72,13 +73,13 @@ export const debugApi = {
     since = 0,
     limit = 200,
     params: { kinds?: string[] } = {},
-  ) => {
+  ): Promise<OperationLogTail> => {
     const path = withQuery(`/api/v1/debug/sessions/${encodeURIComponent(sessionId)}/logs/tail`, {
       since,
       limit,
       kinds: params.kinds?.join(","),
     });
-    const response = await apiClient.requestEnvelope(path);
+    const response = await apiClient.requestEnvelope<OperationLogTail>(path);
     return response.data;
   },
   sessionLogsWsUrl: (sessionId: string): string => resolveWsUrl(`/api/v1/debug/sessions/${encodeURIComponent(sessionId)}/logs/ws`),

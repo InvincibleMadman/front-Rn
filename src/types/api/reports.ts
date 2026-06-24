@@ -98,3 +98,10 @@ export interface ReportPreview {
     action_label?: string | null;
   }>;
 }
+
+
+export interface ReportSectionPreview {
+  id: string;
+  title: string;
+  status?: string;
+}

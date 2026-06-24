@@ -1250,13 +1250,23 @@ app.get("/web-api/dashboard/overview", { preHandler: [requireWebSession] }, asyn
   const nodes = db.prepare("SELECT * FROM nodes WHERE enabled = 1 ORDER BY created_at ASC").all();
   const summaries = await Promise.all(nodes.map(async (node) => {
     try {
-      const [sys, protocols, jobs, graph, assets, jobList] = await Promise.all([
-        nodeFetchJson(node, "/api/v1/system/info", request.user),
-        nodeFetchJson(node, "/api/v1/protocols", request.user),
-        nodeFetchJson(node, "/api/v1/jobs/summary", request.user),
-        nodeFetchJson(node, "/api/v1/assets/overview-graph", request.user),
-        nodeFetchJson(node, "/api/v1/assets", request.user).catch(() => null),
-        nodeFetchJson(node, "/api/v1/jobs", request.user).catch(() => null),
+      const sys = await nodeFetchJson(node, "/api/v1/system/info", request.user);
+      const partialErrors = [];
+      const fetchOverviewPart = async (pathWithQuery, fallback = null) => {
+        try {
+          return await nodeFetchJson(node, pathWithQuery, request.user);
+        } catch (error) {
+          partialErrors.push(`${pathWithQuery}: ${cleanMessage(error)}`);
+          logWarn("bff", "proxy", `dashboard partial degraded for ${node.node_id} ${pathWithQuery}`, error);
+          return fallback;
+        }
+      };
+      const [protocols, jobs, graph, assets, jobList] = await Promise.all([
+        fetchOverviewPart("/api/v1/protocols"),
+        fetchOverviewPart("/api/v1/jobs/summary"),
+        fetchOverviewPart("/api/v1/assets/overview-graph"),
+        fetchOverviewPart("/api/v1/assets"),
+        fetchOverviewPart("/api/v1/jobs"),
       ]);
       const protocolItems = Array.isArray(protocols?.data?.protocols) ? protocols.data.protocols : [];
       const jobItems = Array.isArray(jobList?.data?.jobs)
@@ -1386,6 +1396,7 @@ app.get("/web-api/dashboard/overview", { preHandler: [requireWebSession] }, asyn
         assets: assetItems,
         job_items: jobItems,
         protocol_summaries: protocolSummaries,
+        error: partialErrors.length ? partialErrors.join("; ") : undefined,
       };
     } catch (error) {
       logWarn("bff", "proxy", `dashboard summary degraded for ${node.node_id}`, error);

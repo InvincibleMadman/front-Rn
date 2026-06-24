@@ -1,9 +1,9 @@
 import { apiClient } from "@/lib/api/client";
 import type { VulnHistoryListResponse, VulnHistoryRecord, VulnQuery, VulnSummary, VulnTrendResponse } from "@/types/api/vuln-history";
 
-function qs(params: Record<string, unknown>): string {
+function qs(params: object): string {
   const query = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
+  Object.entries(params as Record<string, unknown>).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
   });
   const text = query.toString();

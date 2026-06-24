@@ -773,7 +773,18 @@ export function JobsView(): JSX.Element {
               </Button>
             </div>
           </div>
-          <JobsMonitoringOverview data={monitorQuery.data} selectedJobId={selectedMonitorJobId} selectedJobHistory={selectedMonitorJobHistory} onSelectJob={(jobId) => { setSelectedMonitorJobId(jobId); dockLog("info", "job", `inspect monitor job ${jobId}`); }} />
+          <JobsMonitoringOverview
+            activity={monitorQuery.data}
+            jobs={jobs}
+            selectedJobId={selectedMonitorJobId}
+            focusedJob={jobs.find((job) => job.job_id === selectedMonitorJobId)}
+            focusedMetrics={monitorQuery.data?.selected_job_metrics ?? null}
+            focusedMetricsHistory={selectedMonitorJobHistory}
+            onSelectJob={(jobId) => {
+              setSelectedMonitorJobId(jobId);
+              dockLog("info", "job", `inspect monitor job ${jobId}`);
+            }}
+          />
         </div>
       ) : null}
     </div>

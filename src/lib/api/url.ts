@@ -7,7 +7,7 @@ export function getApiBaseUrl(): string {
 
 export function getSelectedNodeId(): string | null {
   const nodeId = useUiStore.getState().selectedApiNodeId?.trim();
-  return nodeId && nodeId !== "local" ? nodeId : null;
+  return nodeId ? nodeId : null;
 }
 
 export function requireSelectedNodeId(path?: string): string {

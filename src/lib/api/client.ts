@@ -59,7 +59,7 @@ async function parseBody(response: Response): Promise<unknown> {
   return response.text();
 }
 
-function buildHeaders(options?: RequestOptions): HeadersInit {
+function buildHeaders(path: string, options?: RequestOptions): HeadersInit {
   const headers = new Headers(options?.headers ?? {});
   const method = methodOf(options);
   const body = options?.body;
@@ -73,6 +73,12 @@ function buildHeaders(options?: RequestOptions): HeadersInit {
 
   if (shouldSetJsonContentType) headers.set("Content-Type", "application/json");
   if (options?.operationId && !headers.has("X-Operation-Id")) headers.set("X-Operation-Id", options.operationId);
+
+  const selectedNodeId = getSelectedNodeId();
+  if (selectedNodeId && !headers.has("X-Selected-Node-Id")) {
+    headers.set("X-Selected-Node-Id", selectedNodeId);
+  }
+
   if (!["GET", "HEAD", "OPTIONS"].includes(method) && !headers.has("X-CSRF-Token")) {
     const csrfToken = useAuthStore.getState().csrfToken;
     if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
@@ -173,7 +179,7 @@ async function doFetch(path: string, options?: RequestOptions): Promise<{ respon
       ...options,
       credentials: options?.credentials ?? "include",
       signal: controller?.signal ?? options?.signal,
-      headers: buildHeaders(options),
+      headers: buildHeaders(path, options),
     });
     const payload = await parseBody(response);
     return { response, payload, url, method };

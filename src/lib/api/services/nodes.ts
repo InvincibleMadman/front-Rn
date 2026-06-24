@@ -40,15 +40,21 @@ export const nodesApi = {
       credentials: "include",
     });
     const nodes = response.data.items.map(mapNode);
-    useUiStore.getState().setApiNodes(nodes);
-    const selectedId = useUiStore.getState().selectedApiNodeId;
+    const store = useUiStore.getState();
+    const selectedId = store.selectedApiNodeId.trim();
     const selected = selectedId ? nodes.find((node) => node.id === selectedId) ?? null : null;
+    const fallbackNode = nodes.find((node) => node.enabled !== false) ?? nodes[0] ?? null;
+    const resolvedNode = selected ?? fallbackNode;
 
-    if (!selected && selectedId) {
-      useUiStore.getState().setSelectedApiNodeId("");
+    store.setApiNodes(nodes);
+
+    if (resolvedNode && resolvedNode.id !== selectedId) {
+      store.setSelectedApiNodeId(resolvedNode.id);
+    } else if (!resolvedNode && selectedId) {
+      store.setSelectedApiNodeId("");
     }
 
-    return { defaultNodeId: selected?.id ?? "", nodes };
+    return { defaultNodeId: resolvedNode?.id ?? "", nodes };
   },
 
   async createNode(node: { id: string; name: string; baseUrl: string; description?: string; enabled?: boolean; nodeSecret: string }): Promise<ApiNode> {

@@ -50,13 +50,21 @@ function PrimitiveValue({ value }: { value: string | number | boolean | null | u
   }
 
   if (!value.trim()) {
-    return <span className="text-muted-foreground">—</span>;
+    return <span className="text-muted-foreground">-</span>;
   }
 
   return <div className="whitespace-pre-wrap break-words text-foreground">{value}</div>;
 }
 
-function JsonNode({ value, depth = 0 }: { value: unknown; depth?: number }): JSX.Element {
+function JsonNode({
+  value,
+  depth = 0,
+  compact = false,
+}: {
+  value: unknown;
+  depth?: number;
+  compact?: boolean;
+}): JSX.Element {
   const parsedValue = tryParseJsonLikeString(value);
 
   if (isPrimitive(parsedValue)) {
@@ -73,7 +81,7 @@ function JsonNode({ value, depth = 0 }: { value: unknown; depth?: number }): JSX
 
   if (Array.isArray(parsedValue)) {
     if (parsedValue.length === 0) {
-      return <span className="text-sm text-muted-foreground">空数组</span>;
+      return <span className="text-sm text-muted-foreground">empty array</span>;
     }
 
     return (
@@ -85,7 +93,7 @@ function JsonNode({ value, depth = 0 }: { value: unknown; depth?: number }): JSX
                 #{index}
               </span>
             </div>
-            <JsonNode value={item} depth={depth + 1} />
+            <JsonNode value={item} depth={depth + 1} compact={compact} />
           </div>
         ))}
       </div>
@@ -99,8 +107,12 @@ function JsonNode({ value, depth = 0 }: { value: unknown; depth?: number }): JSX
   const entries = Object.entries(parsedValue);
 
   if (entries.length === 0) {
-    return <span className="text-sm text-muted-foreground">空对象</span>;
+    return <span className="text-sm text-muted-foreground">empty object</span>;
   }
+
+  const keyColumnClass = compact
+    ? "[grid-template-columns:minmax(84px,132px)_minmax(0,1fr)]"
+    : "[grid-template-columns:minmax(104px,168px)_minmax(0,1fr)]";
 
   return (
     <div className="space-y-2">
@@ -111,14 +123,14 @@ function JsonNode({ value, depth = 0 }: { value: unknown; depth?: number }): JSX
         return (
           <Fragment key={`${depth}-${key}`}>
             <div className="rounded-[var(--radius-md)] border border-border/60 bg-background/68 p-3">
-              <div className={cn("gap-3", nested ? "space-y-2" : "grid items-start [grid-template-columns:minmax(160px,240px)_minmax(0,1fr)]")}>
+              <div className={cn("gap-3", nested ? "space-y-2" : `grid items-start ${keyColumnClass}`)}>
                 <div className="min-w-0 break-all">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     {key}
                   </span>
                 </div>
                 <div className="min-w-0">
-                  <JsonNode value={child} depth={depth + 1} />
+                  <JsonNode value={child} depth={depth + 1} compact={compact} />
                 </div>
               </div>
             </div>
@@ -138,7 +150,7 @@ export function JsonViewer({
 }): JSX.Element {
   const content = (
     <div className={cn("p-4", compact && "p-0")}>
-      <JsonNode value={data} />
+      <JsonNode value={data} compact={compact} />
     </div>
   );
 

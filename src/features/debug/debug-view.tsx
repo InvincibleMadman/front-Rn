@@ -58,7 +58,7 @@ export function DebugView(): JSX.Element {
 
   const jobsQuery = useQuery({
     queryKey: ["jobs"],
-    queryFn: jobsApi.listJobs,
+    queryFn: () => jobsApi.listJobs(),
     retry: 0,
   });
 
@@ -151,10 +151,20 @@ export function DebugView(): JSX.Element {
 
   const currentSession = sessionQuery.data ?? null;
   const currentLive = liveQuery.data ?? null;
+  const logTailItems = logTailQuery.data?.items ?? [];
+  const normalizedLogTailItems = useMemo(
+    () => logTailItems.map((item) => ({
+      kind: String(item.kind ?? "event"),
+      stage: String(item.stage ?? ""),
+      message: String(item.message ?? item.line ?? item.payload ?? "").trim(),
+      data: (item.data as Record<string, unknown> | undefined) ?? {},
+    })),
+    [logTailItems],
+  );
   const workspaceRef = useMemo(() => {
-    const viewModel = buildMonitorViewModel(currentSession, currentLive, logTailQuery.data?.items?.map((item: Record<string, unknown>) => String(item.message ?? item.payload ?? "")).filter(Boolean) ?? []);
+    const viewModel = buildMonitorViewModel(currentSession, currentLive, normalizedLogTailItems);
     return viewModel.source.workspaceRef;
-  }, [currentLive, currentSession, logTailQuery.data]);
+  }, [currentLive, currentSession, normalizedLogTailItems]);
 
   const sourceRefParts = useMemo(() => parseWorkspaceRef(workspaceRef), [workspaceRef]);
 
@@ -300,14 +310,9 @@ export function DebugView(): JSX.Element {
     return buildMonitorViewModel(
       currentSession,
       currentLive,
-      (((logTailQuery.data?.items as Array<Record<string, unknown>> | undefined) ?? []) as Array<Record<string, unknown>>).map((item) => ({
-        kind: String(item.kind ?? "event"),
-        stage: String(item.stage ?? ""),
-        message: String(item.message ?? item.line ?? item.payload ?? "").trim(),
-        data: (item.data as Record<string, unknown> | undefined) ?? {},
-      })),
+      normalizedLogTailItems,
     );
-  }, [activeSessionId, currentLive, currentSession, logTailQuery.data?.items, ui.protocol]);
+  }, [activeSessionId, currentLive, currentSession, normalizedLogTailItems, ui.protocol]);
 
   const previewExcerpt = useMemo(() => {
     const lines = sourcePreviewQuery.data?.content?.split(/\r?\n/);

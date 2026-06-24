@@ -44,9 +44,9 @@ function numberField(record: Record<string, unknown>, key: string): number | und
   return numberFrom(record[key]);
 }
 
-function withQuery(path: string, query: Record<string, unknown>): string {
+function withQuery(path: string, query: object): string {
   const search = new URLSearchParams();
-  Object.entries(query).forEach(([key, value]) => {
+  Object.entries(query as Record<string, unknown>).forEach(([key, value]) => {
     if (value === undefined || value === null || value === "") return;
     search.set(key, String(value));
   });

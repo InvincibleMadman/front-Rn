@@ -1,21 +1,10 @@
-import { useEffect } from "react";
 import { AlertTriangle, ExternalLink, X } from "lucide-react";
+import { ApiErrorAlert } from "@/components/common/api-error-alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { ApiErrorAlert } from "@/components/common/api-error-alert";
-import { normalizeApiError } from "@/lib/api/errors";
 import { useFeedbackStore } from "@/stores/feedback-store";
-import { dockLog } from "@/components/layout/dock";
 
-export function reportGlobalError(error: unknown, title = "请求失败", source = "api"): void {
-  const payload = normalizeApiError(error, title);
-  useFeedbackStore.getState().pushError({
-    title,
-    error: payload,
-    source,
-  });
-  dockLog("error", source, `${title}: ${payload.message}`, payload);
-}
+export { reportGlobalError } from "@/components/common/global-error-report";
 
 export function GlobalErrorCenter(): JSX.Element | null {
   const entries = useFeedbackStore((state) => state.entries);
@@ -25,15 +14,7 @@ export function GlobalErrorCenter(): JSX.Element | null {
   const openDetail = useFeedbackStore((state) => state.openDetail);
   const closeDetail = useFeedbackStore((state) => state.closeDetail);
 
-  const active = entries.find((entry) => entry.id === activeId);
-
-  useEffect(() => {
-    if (!entries.length) return;
-    const timer = window.setTimeout(() => {
-      dismiss(entries[0].id);
-    }, 6500);
-    return () => window.clearTimeout(timer);
-  }, [dismiss, entries]);
+  const active = entries.find((entry) => entry.id === activeId) ?? null;
 
   if (!entries.length) return null;
 
@@ -82,15 +63,32 @@ export function GlobalErrorCenter(): JSX.Element | null {
         ) : null}
       </div>
 
-      <Dialog open={Boolean(active)} onOpenChange={(open) => (open ? undefined : closeDetail())}>
+      <Dialog open={Boolean(active)}>
         {active ? (
-          <DialogContent className="w-[min(92vw,56rem)] max-h-[min(80vh,54rem)] overflow-hidden bg-[hsl(var(--bg-dialog)/0.98)] p-0">
+          <DialogContent
+            className="w-[min(92vw,56rem)] max-h-[min(80vh,54rem)] overflow-hidden bg-[hsl(var(--bg-dialog)/0.98)] p-0"
+            onEscapeKeyDown={(event) => event.preventDefault()}
+            onPointerDownOutside={(event) => event.preventDefault()}
+            onInteractOutside={(event) => event.preventDefault()}
+          >
             <div className="border-b border-border/60 px-6 py-5">
-              <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Error Detail</p>
-              <h2 className="mt-2 text-xl font-semibold">{active.title}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {active.source ?? "api"} · {new Date(active.createdAt).toLocaleString("zh-CN", { hour12: false })}
-              </p>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Error Detail</p>
+                  <h2 className="mt-2 text-xl font-semibold">{active.title}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {active.source ?? "api"} · {new Date(active.createdAt).toLocaleString("zh-CN", { hour12: false })}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  onClick={closeDetail}
+                  aria-label="关闭错误详情"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
             </div>
             <div className="console-scrollbar max-h-[calc(min(80vh,54rem)-7rem)] overflow-y-auto px-6 py-5">
               <ApiErrorAlert error={active.error} title={active.title} reportToGlobal={false} />

@@ -54,8 +54,8 @@ export const useUiStore = create<UiState>()(
         if (!persistedState || typeof persistedState !== "object") return persistedState;
         const record = persistedState as Record<string, unknown>;
         const selectedApiNodeId =
-          typeof record.selectedApiNodeId === "string" && record.selectedApiNodeId !== "local"
-            ? record.selectedApiNodeId
+          typeof record.selectedApiNodeId === "string"
+            ? record.selectedApiNodeId.trim()
             : "";
         return {
           ...record,
