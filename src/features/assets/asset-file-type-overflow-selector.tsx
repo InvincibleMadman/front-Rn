@@ -186,16 +186,11 @@ export function AssetFileTypeOverflowSelector({
       };
     }
 
-    const selected = selectedOption;
-    const ordered = selected
-      ? [selected, ...resolvedOptions.filter((item) => item.value !== selected.value)]
-      : resolvedOptions;
-
     const visible: AssetFileTypeOption[] = [];
     const hidden: AssetFileTypeOption[] = [];
     let used = 0;
 
-    for (const item of ordered) {
+    for (const item of resolvedOptions) {
       const width = itemWidths[item.value] ?? estimateOptionWidth(item);
       const gap = visible.length > 0 ? BUTTON_GAP : 0;
       if (used + gap + width <= availableWidth || visible.length === 0) {
@@ -237,28 +232,30 @@ export function AssetFileTypeOverflowSelector({
         {resolvedOptions.length === 0 ? (
           <div className="flex h-8 items-center text-sm text-muted-foreground">暂无类型</div>
         ) : (
-          <div className="flex min-h-0 min-w-0 items-center gap-1.5 overflow-hidden">
-            {visibleOptions.map((option) => {
-              const active = option.value === selectedOption?.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={buildOptionButtonClass(active, option.disabled)}
-                  onClick={() => {
-                    if (option.disabled) return;
-                    onValueChange(option.value);
-                    setMenuOpen(false);
-                  }}
-                  title={option.label}
-                >
-                  {renderOptionContent(option, active)}
-                </button>
-              );
-            })}
+          <div className="flex min-h-0 min-w-0 items-center gap-1.5">
+            <div className="flex min-h-0 min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+              {visibleOptions.map((option) => {
+                const active = option.value === selectedOption?.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={buildOptionButtonClass(active, option.disabled)}
+                    onClick={() => {
+                      if (option.disabled) return;
+                      onValueChange(option.value);
+                      setMenuOpen(false);
+                    }}
+                    title={option.label}
+                  >
+                    {renderOptionContent(option, active)}
+                  </button>
+                );
+              })}
+            </div>
 
             {hiddenOptions.length > 0 ? (
-              <div className="relative shrink-0">
+              <div className="relative shrink-0 overflow-visible">
                 <button
                   ref={triggerRef}
                   type="button"

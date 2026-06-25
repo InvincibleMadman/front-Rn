@@ -27,7 +27,7 @@ export function DebugArchiveList({
       <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">归档页</p>
-          <p className="mt-1 text-sm text-foreground">优先展示漏洞记录与其关联 session，便于从漏洞结果回到调试现场。</p>
+          <p className="mt-1 text-sm text-foreground">归档记录，将成功定位的漏洞和证据信息整合，关联到调试会话</p>
         </div>
         <div className="flex flex-col gap-2 md:flex-row">
           <div className="relative min-w-[16rem]">

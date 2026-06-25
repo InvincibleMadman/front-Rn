@@ -52,7 +52,7 @@ export function ArtifactsView(): JSX.Element {
       <PageHeader
         eyebrow="产 物 中 心"
         title="产物中心"
-        description="跨协议检索 fuzz、风险分析、GDB、报告等证据产物，展示 workspace_ref、scope、kind、virtual_path，并提供安全预览与下载。"
+        description="全局综合检索系统运行产生的资产材料，便于分类搜集整理，提供安全预览与下载"
       />
 
       <Card>

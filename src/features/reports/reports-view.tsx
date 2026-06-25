@@ -113,7 +113,7 @@ export function ReportsView(): JSX.Element {
       <PageHeroBoard
           eyebrow="R E P O R T S · W O R K B E N C H"
           title="报告中心"
-          description="将页面主体改为真正的三栏准备工作台：左侧章节准备树，中间资产 / 证据预览，右侧生成配置与生成摘要。"
+          description="针对协议资产任务运行的多材料聚合，导出便于分析的可视化汇总安全测试报告"
           boardClassName="[--board-surface:190_100%_97%] [--board-border:215_58%_84%] [--board-track:201_62%_92%] [--board-accent-soft:191_86%_93%] [--board-accent:194_72%_46%] [--board-accent-strong:228_70%_44%] dark:[--board-surface:222_27%_18%] dark:[--board-border:223_28%_33%] dark:[--board-track:221_19%_27%] dark:[--board-accent-soft:213_34%_27%] dark:[--board-accent:192_86%_68%] dark:[--board-accent-strong:230_90%_76%]"
           board={<ReportReadinessBoard preview={previewQuery.data} />}
       />

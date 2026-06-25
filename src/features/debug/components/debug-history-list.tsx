@@ -28,7 +28,7 @@ export function DebugHistoryList({
       <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">记录页</p>
-          <p className="mt-1 text-sm text-foreground">历史会话优先服务于复看、切监控、回填重跑。</p>
+          <p className="mt-1 text-sm text-foreground">用于回看调试流、监控、重放任务的历史会话记录</p>
         </div>
         <div className="flex flex-col gap-2 md:flex-row">
           <div className="relative min-w-[16rem]">

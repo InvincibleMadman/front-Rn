@@ -88,7 +88,7 @@ export function DebugLaunchPanel({
       <div className="grid gap-4">
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="mb-4 flex items-start justify-between gap-3">
-            <SectionTitle title="启动入口" desc="先锁定协议与 crash 候选，再对右侧表单做最小修正。" />
+            <SectionTitle title="启动入口" desc="调试进行的最基本依赖：协议资产与 crash " />
             <Button type="button" size="sm" variant="outline" onClick={onReloadCandidates} className="rounded-lg">
               <RefreshCw className="h-3.5 w-3.5" />
               刷新候选

@@ -650,7 +650,7 @@ export function JobsView(): JSX.Element {
       <PageHeroBoard
         eyebrow="F U Z Z · J O B S"
         title="任务中心"
-        description="将任务创建、检索与运行态监控拆分成三种工作流；创建页内部再明确拆成 Fuzz / AFL 与 Build 两个一级面板。"
+        description="任务创建、检索与运行态监控三种工作流，围绕ICPilot-AFL++平台支持的Fuzz系列工具能力"
         boardClassName="[--board-surface:276_100%_98%] [--board-border:274_54%_85%] [--board-track:274_55%_92%] [--board-accent-soft:276_92%_95%] [--board-accent:272_68%_56%] [--board-accent-strong:268_74%_44%] dark:[--board-surface:263_28%_19%] dark:[--board-border:267_32%_34%] dark:[--board-track:263_20%_28%] dark:[--board-accent-soft:268_34%_28%] dark:[--board-accent:278_85%_73%] dark:[--board-accent-strong:286_92%_82%]"
         board={<JobsStatusBoard summary={summary} />}
       />

@@ -93,7 +93,7 @@ export function VulnHistoryView(): JSX.Element {
       <PageHeroBoard
           eyebrow="V U L N E R A B I L I T Y · O P S"
           title="漏洞中心"
-          description="按安全运营页组织：顶部 sticky 检索，中部类型分布 / 趋势 / 闭环状态，下方左记录列表右证据详情；全局与单协议必须真实区分。"
+          description="成功经智能体 GDB 调试定位归档的漏洞详情检索访问，支持查看证据和类型等元数据，统计汇总相关数据制表"
           board={<VulnStatusBoard summary={summary} />}
       />
 

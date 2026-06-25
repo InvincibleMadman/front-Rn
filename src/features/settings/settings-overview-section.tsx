@@ -98,7 +98,7 @@ export function SettingsOverviewSection({
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <SettingsInfoGroup title="当前节点" description="当前选中节点与 control plane 摘要。">
+        <SettingsInfoGroup title="当前节点" description="当前选中节点与其控制面属性摘要">
           <SettingsInfoRow
             icon={<Network className="size-4" />}
             label="节点"
@@ -129,7 +129,7 @@ export function SettingsOverviewSection({
           />
         </SettingsInfoGroup>
 
-        <SettingsInfoGroup title="BFF 安全" description="保持 session、CSRF 与失败节流边界。">
+        <SettingsInfoGroup title="BFF 安全" description="会话保持、CSRF 与失败节流边界">
           <SettingsInfoRow
             icon={<ShieldCheck className="size-4" />}
             label="Session"
@@ -163,7 +163,7 @@ export function SettingsOverviewSection({
           />
         </SettingsInfoGroup>
 
-        <SettingsInfoGroup title="结构边界" description="系统安全边界与当前角色摘要。">
+        <SettingsInfoGroup title="结构边界" description="系统安全边界与当前角色摘要">
           <SettingsInfoRow
             icon={<ShieldCheck className="size-4" />}
             label="API contract"
@@ -187,7 +187,7 @@ export function SettingsOverviewSection({
           />
         </SettingsInfoGroup>
 
-        <SettingsInfoGroup title="LLM / Build / Tools" description="简洁汇总当前控制面主要能力状态。">
+        <SettingsInfoGroup title="LLM / Build / Tools" description="简洁汇总当前功能服务主要能力状态">
           <SettingsInfoRow
             icon={<Sparkles className="size-4" />}
             label="LLM"

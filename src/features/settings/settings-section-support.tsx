@@ -35,7 +35,7 @@ export function ConfigSubmitBar({
         <p className="mt-1 text-sm text-muted-foreground">
           {disabled
             ? "请先在顶栏选择后端节点，再提交到当前节点的 /api/v1/config。"
-            : `当前目标节点：${selectedNodeName}。提交结构与现有 API 保持一致。`}
+            : `当前目标节点：<[ ${selectedNodeName} ]>  提交结构将与现有 API 保持一致`}
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-3">

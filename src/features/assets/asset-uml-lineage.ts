@@ -64,6 +64,25 @@ function createEntity(partial: Omit<UmlAssetEntity, "x" | "y">): UmlAssetEntity 
   };
 }
 
+function hasNonZeroRenderableAttributeValue(value: string | number): boolean {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value !== 0;
+  }
+
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return false;
+  const numeric = Number(trimmed);
+  return Number.isFinite(numeric) && numeric !== 0;
+}
+
+function filterRenderableLineageEntities(protocol: string, entities: UmlAssetEntity[]): UmlAssetEntity[] {
+  if (normalizeProtocol(protocol) === "legacy-default") {
+    return entities;
+  }
+
+  return entities.filter((entity) => entity.attributes.some((attribute) => hasNonZeroRenderableAttributeValue(attribute.value)));
+}
+
 function buildCounts(model: AssetGraphModel): CountSnapshot {
   return {
     source: countOf(model, "source"),
@@ -502,7 +521,10 @@ export function buildProtocolLineageDiagram(
   summary?: ProtocolAssetSummary | null,
 ): UmlDiagramModel {
   const normalizedProtocol = normalizeProtocol(protocol);
-  const entities = buildProtocolAssetEntities(normalizedProtocol, model, summary);
+  const entities = filterRenderableLineageEntities(
+    normalizedProtocol,
+    buildProtocolAssetEntities(normalizedProtocol, model, summary),
+  );
   const relations = buildProtocolUmlRelations(entities, buildCounts(model));
   return layoutProtocolSmartUmlLineage(normalizedProtocol, entities, relations);
 }

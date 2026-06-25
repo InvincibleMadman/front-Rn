@@ -124,7 +124,7 @@ export function NodesView(): JSX.Element {
       <ApiErrorReporter error={pingError} title="节点 Ping 失败" source="nodes" />
       <ApiErrorReporter error={saveMutation.error} title="节点保存失败" source="nodes" />
       <ApiErrorReporter error={removeMutation.error} title="节点删除失败" source="nodes" />
-      <PageHeader eyebrow="Backend Nodes" title="后端节点管理" description="节点统一保存于 Web BFF。普通用户可新增并修改自己创建的节点，删除节点仅管理员可用。" />
+      <PageHeader eyebrow="Backend Nodes" title="后端节点管理" description="Web BFF 层统一管理后端实例节点信息，提供HMAC密钥认证通过节点检查进行安全访问" />
 
       <div className="grid gap-4 xl:grid-cols-[1fr_0.85fr]">
         <div className="space-y-4">

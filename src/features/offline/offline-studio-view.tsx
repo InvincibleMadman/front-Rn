@@ -1103,13 +1103,13 @@ export function OfflineStudioView(): JSX.Element {
       <PageHeader
         eyebrow="协议准备工作台"
         title="协议准备工作台"
-        description="保留离线分析子功能，并新增 BuildPlan、BuildRun、LaunchProfile 的准备链路。"
+        description="Fuzz离线分析子功能，用于启动在线模糊测试前的协议相关信息分析整理，以实现多源知识增强"
       />
 
       <Card>
         <CardHeader>
           <CardTitle>当前准备上下文</CardTitle>
-          <CardDescription>推荐优先使用 `workspace://` 引用；旧字段路径仍保持兼容。</CardDescription>
+          <CardDescription>使用 `workspace://` 引用虚拟文件树中的协议资产</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
@@ -1958,7 +1958,7 @@ export function OfflineStudioView(): JSX.Element {
                     <UploadCloud className="size-4 text-primary" />
                     漏洞文档源
                   </CardTitle>
-                  <CardDescription>左侧保持上传、蒸馏和搜索参数，执行输出统一进入底部 GlobalLogDock。</CardDescription>
+                  <CardDescription>上传后可进行蒸馏操作，支持搜索具体的文档内容预览</CardDescription>
                 </CardHeader>
                 <CardContent className="console-scrollbar flex-1 space-y-4 overflow-y-auto p-5">
                   <FormField
@@ -2103,7 +2103,7 @@ export function OfflineStudioView(): JSX.Element {
                       <Database className="size-4 text-primary" />
                       知识摘要与搜索命中
                     </CardTitle>
-                    <CardDescription>中列突出可操作结果：热门条目、搜索命中和结构化字段，不再使用拉长整页的展开块。</CardDescription>
+                    <CardDescription>上传蒸馏后可查看结果：热门条目、搜索命中和结构化字段</CardDescription>
                   </CardHeader>
                   <CardContent className="grid gap-4 p-5 lg:grid-cols-[0.94fr_1.06fr]">
                     <div className="space-y-3">
@@ -2205,7 +2205,7 @@ export function OfflineStudioView(): JSX.Element {
                       <Network className="size-4 text-primary" />
                       图谱与状态摘要
                     </CardTitle>
-                    <CardDescription>右列负责统计、引用和已选条目证据，不再把原始 JSON 大面积铺在页面里。</CardDescription>
+                    <CardDescription>统计、引用和已选条目证据</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4 p-5">
                     <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
@@ -2242,7 +2242,7 @@ export function OfflineStudioView(): JSX.Element {
                 <Card className="overflow-hidden">
                   <CardHeader className="border-b border-border/50">
                     <CardTitle className="text-base">条目证据与引用</CardTitle>
-                    <CardDescription>主结果之外的详情集中到右侧卡片，并限制为卡片内滚动。</CardDescription>
+                    <CardDescription>详情预览</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4 p-5">
                     {!selectedKbEntry ? (
@@ -2300,7 +2300,7 @@ export function OfflineStudioView(): JSX.Element {
                 <Card className="overflow-hidden">
                   <CardHeader className="border-b border-border/50">
                     <CardTitle className="text-base">原始返回快照</CardTitle>
-                    <CardDescription>保留调试入口，但限制在独立小卡片中内联滚动。</CardDescription>
+                    <CardDescription></CardDescription>
                   </CardHeader>
                   <CardContent className="p-5">
                     <div className="console-scrollbar max-h-[16rem] overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">

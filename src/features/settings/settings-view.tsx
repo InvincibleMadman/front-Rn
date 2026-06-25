@@ -359,7 +359,7 @@ export function SettingsView(): JSX.Element {
       eyebrow: "Current node / control plane",
       title: selectedNode?.name ?? "未选择节点",
       value: currentNodeStatus,
-      description: "聚合当前节点的 control plane、node_id 与现代 `/api/v1/*` 链路状态。",
+      description: "聚合当前节点的控制面接口与功能链路状态视图",
       tone: nodeTone,
       items: [
         { label: "node_id", value: safeText(controlPlane?.node_id, selectedNodeId || "未选择节点"), mono: true },
@@ -373,7 +373,7 @@ export function SettingsView(): JSX.Element {
       eyebrow: "Web BFF security",
       title: "Session + CSRF",
       value: hasSecurityInputs ? `${securityPostureScore}%` : "Unavailable",
-      description: "基于 BFF 会话、CSRF、登录节流与默认 secret 风险计算安全姿态。",
+      description: "基于 BFF 和节点会话的各属性状态计算风险评估安全姿态",
       tone: hasSecurityInputs ? securityTone : "default",
       items: [
         { label: "http_only", value: yesNo(securitySummary?.session?.http_only), tone: securitySummary?.session?.http_only ? "success" : "warning" },
@@ -396,7 +396,7 @@ export function SettingsView(): JSX.Element {
       eyebrow: "LLM / build",
       title: llmProvider || "LLM not configured",
       value: buildEnabled ? "已启用" : "已关闭",
-      description: "聚合 provider、model、构建助手开关与 LLM 辅助状态。",
+      description: "Provider、Model、构建助手与 LLM 辅助等智能服务状态",
       tone: llmTone,
       items: [
         { label: "model", value: llmModel || "未配置" },
@@ -759,7 +759,7 @@ export function SettingsView(): JSX.Element {
           <summary className="settings-json-foldout__summary">
             <div>
               <CardTitle>当前配置 JSON / 调试信息</CardTitle>
-              <CardDescription className="mt-1">保留底部折叠区，用于对照节点配置、system info、capabilities 与 BFF 安全摘要原始返回。</CardDescription>
+              <CardDescription className="mt-1">测试人员辅助底部折叠区，用于对照节点配置、system info、capabilities 与 BFF 安全摘要原始返回字段</CardDescription>
             </div>
             <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1 text-xs text-muted-foreground transition-colors group-open:bg-primary/10 group-open:text-primary">
               <span className="group-open:hidden">展开</span>

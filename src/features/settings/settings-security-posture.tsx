@@ -102,7 +102,7 @@ export function SettingsSecurityPosture({
       <div className="rounded-[var(--radius-lg)] border border-border/60 bg-background/55 px-3 py-3 text-sm text-muted-foreground">
         <div className="flex items-start gap-2">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-          <p>系统已无 compat 旁路，只保留 Web BFF + `/api/v1/*` 现代链路。</p>
+          <p>系统已禁用节点API直连，必须走 Web BFF 身份鉴别后现代链路通信</p>
         </div>
       </div>
     </div>

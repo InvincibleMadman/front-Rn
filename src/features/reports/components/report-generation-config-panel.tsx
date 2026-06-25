@@ -38,7 +38,7 @@ export function ReportGenerationConfigPanel({
     <Card className="card-surface">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base"><Settings2 className="size-4.5" /> 生成配置</CardTitle>
-        <CardDescription>右侧只负责生成前配置与摘要，不替代中间证据预览。</CardDescription>
+        <CardDescription>生成启动配置与摘要信息</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
