@@ -16,6 +16,7 @@ import {
   Sparkles,
   UploadCloud,
   Wand2,
+  ChevronDown,
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/page-header";
@@ -45,6 +46,7 @@ import { createOperationId } from "@/lib/api/services/operations";
 import { useOperationLogDockSync } from "@/hooks/use-operation-log-dock-sync";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { cn } from "@/lib/utils/cn";
+import { dockLog } from "@/components/layout/dock";
 import type {
   BuildPlan,
   BuildProbe,
@@ -67,21 +69,19 @@ import type {
   KbEntry,
 } from "@/types/api/vuldocs";
 
+const FIXED_PROTOCOL_SPEC_NAME = "protocol_spec.json";
+const FIXED_RISK_ANALYSIS_NAME = "final_analysis.json";
+const FIXED_DICT_FILENAME = "auto.dict";
+
 const protocolSchema = z.object({
   protocol: z.string().min(1, "必填"),
-  source_path: z.string().min(1, "必填"),
-  output_path: z.string().optional(),
-  name: z.string().default("protocol_spec.json"),
   content: z.string().optional(),
   use_llm: z.boolean().default(true),
 });
 
 const seedsSchema = z.object({
   protocol: z.string().min(1, "必填"),
-  spec_path: z.string().optional(),
-  spec_dir: z.string().optional(),
   keyword: z.string().optional(),
-  output_dir: z.string().optional(),
   count: z.coerce.number().int().positive().default(8),
   use_kb_assist: z.boolean().default(true),
   allow_fallback: z.boolean().default(true),
@@ -89,8 +89,6 @@ const seedsSchema = z.object({
 
 const riskAnalyzeSchema = z.object({
   protocol: z.string().min(1, "必填"),
-  source_path: z.string().min(1, "必填"),
-  output_path: z.string().optional(),
   max_workers: z.coerce.number().int().positive().default(4),
   llm_concurrency: z.coerce.number().int().positive().default(2),
   timeout_sec: z.coerce.number().int().positive().default(1800),
@@ -101,14 +99,10 @@ const riskAnalyzeSchema = z.object({
 
 const riskPreviewSchema = z.object({
   protocol: z.string().min(1, "必填"),
-  analysis_path: z.string().optional(),
 });
 
 const instrumentSchema = z.object({
   protocol: z.string().min(1, "必填"),
-  source_path: z.string().optional(),
-  analysis_path: z.string().optional(),
-  output_path: z.string().optional(),
   in_place: z.boolean().default(false),
   compile_check: z.boolean().default(true),
   strict_ast_validation: z.boolean().default(true),
@@ -116,12 +110,9 @@ const instrumentSchema = z.object({
 
 const buildPlanSchema = z.object({
   protocol: z.string().min(1, "必填"),
-  source_ref: z.string().min(1, "必填"),
   compiler: z.string().default("afl-clang-fast"),
   instrumentation_mode: z.string().default("llvm"),
   use_llm: z.boolean().default(false),
-  input_ref: z.string().optional(),
-  dict_ref: z.string().optional(),
 });
 
 const offlineTabOptions = [
@@ -137,6 +128,37 @@ const offlineTabOptions = [
 
 type OfflineTab = (typeof offlineTabOptions)[number]["value"];
 
+type ScopeName =
+  | "source"
+  | "specs"
+  | "seeds"
+  | "risk"
+  | "build"
+  | "dicts"
+  | "debug_replay_scripts";
+
+interface ProtocolAssetBindings {
+  protocol: string;
+  sourceRef: string;
+  sourceDisplay: string;
+  specFileRef: string;
+  specFileDisplay: string;
+  specsDirRef: string;
+  specsDirDisplay: string;
+  seedsOutputRef: string;
+  seedsOutputDisplay: string;
+  riskAnalysisRef: string;
+  riskAnalysisDisplay: string;
+  instrumentedOutputRef: string;
+  instrumentedOutputDisplay: string;
+  buildSourceRef: string;
+  buildSourceDisplay: string;
+  buildInputRef: string;
+  buildInputDisplay: string;
+  dictRef: string;
+  dictDisplay: string;
+}
+
 function entriesOf(
   record?: Record<string, number>,
 ): Array<{ name: string; value: number }> {
@@ -146,12 +168,6 @@ function entriesOf(
 function optionalPath(value?: string | null): string | null {
   const trimmed = value?.trim() ?? "";
   return trimmed ? trimmed : null;
-}
-
-function joinServerPath(root?: string | null, rel = ""): string {
-  const base = root?.trim().replace(/[\\/]+$/, "") ?? "";
-  const child = rel.replace(/^[\\/]+/, "");
-  return base && child ? `${base}/${child}` : base;
 }
 
 function normalizeProtocolText(value?: string | null): string {
@@ -168,32 +184,10 @@ function stringField(record: Record<string, unknown>, key: string): string {
   return typeof value === "string" && value.trim() ? value.trim() : "";
 }
 
-function specPathFromResponse(data: ProtocolAnalyzeResponse | RiskAnalyzeResponse): string {
-  const record = data as Record<string, unknown>;
-  for (const key of ["analysis_path", "spec_path", "output_path", "path", "result_path"]) {
-    const candidate = stringField(record, key);
-    if (candidate) return candidate;
-  }
-  return "";
-}
-
 function protocolPrimaryPathFromResponse(data: ProtocolAnalyzeResponse): string {
   const record = data as Record<string, unknown>;
 
-  // 用于“最近结果 / 工作区引用”的展示路径。优先展示后端对外返回路径；workspace_path 作为最后 fallback。
   for (const key of ["path", "output_path", "spec_path", "copied_to", "workspace_path"]) {
-    const candidate = stringField(record, key);
-    if (candidate) return candidate;
-  }
-
-  return "";
-}
-
-function protocolWorkspaceSpecPathFromResponse(data: ProtocolAnalyzeResponse): string {
-  const record = data as Record<string, unknown>;
-
-  // 用于种子生成 spec_path 的精确规范文件。后端协议提取会复制一份到 workspace_path，优先用这个 workspace 内的 JSON。
-  for (const key of ["workspace_path", "spec_path", "path", "output_path", "copied_to"]) {
     const candidate = stringField(record, key);
     if (candidate) return candidate;
   }
@@ -213,128 +207,113 @@ function protocolRelatedPathsFromResponse(data: ProtocolAnalyzeResponse): string
   );
 }
 
-function serverDirname(path?: string | null): string {
-  const normalized = path?.trim().replace(/\\/g, "/") ?? "";
-  if (!normalized) return "";
-  const index = normalized.lastIndexOf("/");
-  return index > 0 ? normalized.slice(0, index) : "";
+function workspaceRef(protocol: string, scope: ScopeName, relativePath = ""): string {
+  const normalizedProtocol = normalizeProtocolText(protocol);
+  const cleaned = relativePath.replace(/^\/+/, "").replace(/\\/g, "/");
+  return cleaned
+    ? `workspace://${normalizedProtocol}/${scope}/${cleaned}`
+    : `workspace://${normalizedProtocol}/${scope}/`;
 }
 
-function latestSpecPathFromSummary(summary: Record<string, unknown>): string {
-  for (const key of ["latest_spec_path", "spec_path", "workspace_path"]) {
-    const candidate = stringField(summary, key);
-    if (candidate) return candidate;
-  }
+function scopeDisplay(scope: ScopeName, relativePath = "", trailingSlash = false): string {
+  const cleaned = relativePath.replace(/^\/+/, "").replace(/\\/g, "/");
+  if (!cleaned) return `${scope}/`;
+  return trailingSlash ? `${scope}/${cleaned.replace(/\/+$/, "")}/` : `${scope}/${cleaned}`;
+}
 
-  const latestSpec = summary.latest_spec;
-  if (latestSpec && typeof latestSpec === "object") {
-    const record = latestSpec as Record<string, unknown>;
-    for (const key of ["path", "workspace_path", "spec_path", "output_path"]) {
-      const candidate = stringField(record, key);
-      if (candidate) return candidate;
-    }
-  }
-
-  return "";
+function resolveExistingProtocol(value: string, options: string[]): string | null {
+  const current = normalizeProtocolText(value).toLowerCase();
+  if (!current) return null;
+  const matched = options.find((item) => item.trim().toLowerCase() === current);
+  return matched ? matched.trim() : null;
 }
 
 
-function riskAnalysisPathFromResponse(data: unknown): string {
-  const record = data as Record<string, unknown>;
+function buildProtocolAssetBindings(protocol?: string | null): ProtocolAssetBindings | null {
+  const normalizedProtocol = normalizeProtocolText(protocol);
+  if (!normalizedProtocol) return null;
 
-  for (const key of ["analysis_path", "path", "output_path", "result_path", "mirrored_to", "saved_path"]) {
-    const candidate = record[key];
-    if (typeof candidate === "string" && candidate.trim()) return candidate;
-  }
-
-  return "";
-}
-
-function numericField(record: Record<string, unknown>, key: string): number {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function previewFindingCount(data?: RiskPreviewResponse | null): number {
-  if (!data) return 0;
-  return (data.findings ?? data.items ?? []).length;
-}
-
-function previewRawSummary(data?: RiskPreviewResponse | null): {
-  status: string;
-  analysis_path: string;
-  size: number;
-  findings: number;
-} {
   return {
-    status: String(data?.status ?? "idle"),
-    analysis_path: String(data?.analysis_path ?? ""),
-    size: typeof data?.size === "number" ? data.size : 0,
-    findings: previewFindingCount(data),
+    protocol: normalizedProtocol,
+    sourceRef: workspaceRef(normalizedProtocol, "source"),
+    sourceDisplay: scopeDisplay("source", "", true),
+    specFileRef: workspaceRef(normalizedProtocol, "specs", FIXED_PROTOCOL_SPEC_NAME),
+    specFileDisplay: scopeDisplay("specs", FIXED_PROTOCOL_SPEC_NAME),
+    specsDirRef: workspaceRef(normalizedProtocol, "specs"),
+    specsDirDisplay: scopeDisplay("specs", "", true),
+    seedsOutputRef: workspaceRef(normalizedProtocol, "seeds", "bin"),
+    seedsOutputDisplay: scopeDisplay("seeds", "bin", true),
+    riskAnalysisRef: workspaceRef(normalizedProtocol, "risk", `analyses/${FIXED_RISK_ANALYSIS_NAME}`),
+    riskAnalysisDisplay: scopeDisplay("risk", `analyses/${FIXED_RISK_ANALYSIS_NAME}`),
+    instrumentedOutputRef: workspaceRef(normalizedProtocol, "risk", "instrumented"),
+    instrumentedOutputDisplay: scopeDisplay("risk", "instrumented", true),
+    buildSourceRef: workspaceRef(normalizedProtocol, "source"),
+    buildSourceDisplay: scopeDisplay("source", "", true),
+    buildInputRef: workspaceRef(normalizedProtocol, "seeds", "bin"),
+    buildInputDisplay: scopeDisplay("seeds", "bin", true),
+    dictRef: workspaceRef(normalizedProtocol, "dicts", FIXED_DICT_FILENAME),
+    dictDisplay: scopeDisplay("dicts", FIXED_DICT_FILENAME),
   };
 }
 
-function instrumentCounts(data?: InstrumentResponse | null): {
-  applied: number;
-  rejected: number;
-  changedFiles: number;
-  warnings: number;
-} {
+function riskAnalysisPathFromResponse(data: Record<string, unknown>): string {
+  for (const key of ["mirrored_to", "saved_path", "result_path", "output_path", "analysis_path", "path", "copied_to"]) {
+    const value = stringField(data, key);
+    if (value) return value;
+  }
+  return "";
+}
+
+function countByField(items: Array<Record<string, unknown>> | undefined, key: string, fallback: string): Array<{ name: string; value: number }> {
+  const counts = new Map<string, number>();
+  for (const item of items ?? []) {
+    const raw = item?.[key];
+    const name = typeof raw === "string" && raw.trim() ? raw.trim() : fallback;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return Array.from(counts.entries()).map(([name, value]) => ({ name, value }));
+}
+
+function topMetricBars(record?: Record<string, number>, limit = 6): Array<{ name: string; value: number }> {
+  return entriesOf(record).sort((a, b) => b.value - a.value).slice(0, limit);
+}
+
+function kbEntryKey(entry?: KbEntry | null, fallback = "entry"): string {
+  if (!entry) return fallback;
+  return String(entry.entry_id ?? entry.vuln_id ?? entry.doc_id ?? entry.title ?? entry.file_path ?? fallback);
+}
+
+function kbTopEntries(summary?: Record<string, unknown>, entries: KbEntry[] = []): KbEntry[] {
+  const top = Array.isArray(summary?.top_entries) ? (summary?.top_entries as KbEntry[]) : [];
+  return top.length ? top : entries.slice(0, 6);
+}
+
+function previewRawSummary(data?: RiskPreviewResponse | null): Record<string, unknown> {
+  if (!data) return {};
   return {
-    applied: data?.applied_insertions?.length ?? 0,
+    status: data.status,
+    findings: data.findings?.length ?? data.items?.length ?? 0,
+    size: data.size ?? 0,
+    analysis_path: data.analysis_path ?? "",
+  };
+}
+
+function instrumentCounts(data?: InstrumentResponse | null): { inserted: number; rejected: number; warnings: number } {
+  return {
+    inserted: data?.inserted_markers ?? data?.applied_insertions?.length ?? 0,
     rejected: data?.rejected_insertions?.length ?? 0,
-    changedFiles: (data?.changed_files ?? data?.instrumented_files ?? []).length,
     warnings: data?.validation_warnings?.length ?? 0,
   };
 }
 
-function kbTopEntries(summary?: { top_entries?: KbEntry[] } | null, searchItems?: KbEntry[]): KbEntry[] {
-  if (summary?.top_entries?.length) return summary.top_entries;
-  return (searchItems ?? []).slice(0, 6);
-}
-
-function kbEntryKey(entry?: KbEntry | null, fallback = ""): string {
-  if (!entry) return fallback;
-  return String(entry.entry_id ?? entry.vuln_id ?? entry.doc_id ?? entry.title ?? fallback);
-}
-
-function timelineKinds(events?: Array<{ kind?: string }>): Array<{ name: string; value: number }> {
+function timelineKinds(events?: Array<Record<string, unknown>>): Array<{ name: string; value: number }> {
   const counts = new Map<string, number>();
-  (events ?? []).forEach((item) => {
-    const name = item.kind?.trim() || "unknown";
+  for (const event of events ?? []) {
+    const raw = event?.kind;
+    const name = typeof raw === "string" && raw.trim() ? raw.trim() : "event";
     counts.set(name, (counts.get(name) ?? 0) + 1);
-  });
+  }
   return Array.from(counts.entries()).map(([name, value]) => ({ name, value }));
-}
-
-function countByField<T extends Record<string, unknown>>(
-  items: T[] | undefined,
-  field: keyof T,
-  fallback = "unknown",
-): Array<{ name: string; value: number }> {
-  const counts = new Map<string, number>();
-  (items ?? []).forEach((item) => {
-    const raw = item[field];
-    const name = typeof raw === "string" && raw.trim() ? raw.trim() : fallback;
-    counts.set(name, (counts.get(name) ?? 0) + 1);
-  });
-  return Array.from(counts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .map(([name, value]) => ({ name, value }));
-}
-
-function topMetricBars(
-  record?: Record<string, number>,
-  limit = 6,
-): { labels: string[]; values: number[] } {
-  const items = Object.entries(record ?? {})
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit);
-
-  return {
-    labels: items.map(([name]) => name),
-    values: items.map(([, value]) => value),
-  };
 }
 
 function resultStatusCard({
@@ -344,32 +323,36 @@ function resultStatusCard({
   note,
 }: {
   title: string;
-  running?: boolean;
+  running: boolean;
   operationId?: string;
   note: string;
 }): JSX.Element {
   return (
     <div className="rounded-2xl border border-border/60 bg-background/45 px-4 py-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <ShieldAlert className="size-4 text-[hsl(var(--accent-pink))]" />
+      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+        <Activity className={cn("size-4", running ? "text-primary" : "text-muted-foreground")} />
         {title}
       </div>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {running
-          ? "执行中，请查看底部 GlobalLogDock。"
-          : operationId
-            ? `最近 operation_id: ${operationId}`
-            : note}
-      </p>
+      <p className="mt-2 text-xs text-muted-foreground">{note}</p>
+      <p className="mt-2 text-xs text-muted-foreground">operation_id: {operationId ?? "-"}</p>
     </div>
   );
 }
 
-function hasProtocolMatch(protocol: string, options: string[]): boolean {
-  const current = normalizeProtocolText(protocol).toLowerCase();
-  if (!current) return false;
-
-  return options.some((item) => item.trim().toLowerCase() === current);
+function FixedPathField({
+  label,
+  description,
+  value,
+}: {
+  label: string;
+  description?: string;
+  value: string;
+}): JSX.Element {
+  return (
+    <FormField label={label} description={description}>
+      <Input value={value} readOnly className="text-sm" />
+    </FormField>
+  );
 }
 
 async function uploadRiskJsonFile({
@@ -401,7 +384,7 @@ async function uploadRiskJsonFile({
 function ProtocolComboInput({
   value,
   options,
-  placeholder = "输入或选择协议名",
+  placeholder = "输入并匹配已有协议名",
   onValueChange,
   onCommit,
   onOpen,
@@ -415,6 +398,7 @@ function ProtocolComboInput({
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const current = normalizeProtocolText(value);
+  const matched = resolveExistingProtocol(current, options);
 
   const filtered = useMemo(() => {
     const keyword = current.toLowerCase();
@@ -428,9 +412,13 @@ function ProtocolComboInput({
       .slice(0, 12);
   }, [current, options]);
 
-  const hasExactMatch = options.some(
-    (item) => item.trim().toLowerCase() === current.toLowerCase(),
-  );
+  const toggleDropdown = (): void => {
+    setOpen((prev) => {
+      const next = !prev;
+      if (next) void onOpen?.();
+      return next;
+    });
+  };
 
   const openDropdown = (): void => {
     setOpen(true);
@@ -438,15 +426,16 @@ function ProtocolComboInput({
   };
 
   const commit = async (nextValue?: string): Promise<void> => {
-    const next = normalizeProtocolText(nextValue ?? current);
-    if (!next) {
+    const normalized = normalizeProtocolText(nextValue ?? current);
+    const exact = resolveExistingProtocol(normalized, options);
+    if (!exact) {
       setOpen(false);
       return;
     }
 
-    onValueChange(next);
+    onValueChange(exact);
     setOpen(false);
-    await onCommit?.(next);
+    await onCommit?.(exact);
   };
 
   return (
@@ -454,12 +443,13 @@ function ProtocolComboInput({
       <Input
         value={value}
         placeholder={placeholder}
-        className="focus-visible:ring-inset"
-        onFocus={openDropdown}
-        onClick={openDropdown}
+        className={cn(
+          "pr-10 focus-visible:ring-inset",
+          current && !matched && "border-warning/60 text-warning focus-visible:ring-warning/40",
+        )}
         onChange={(event) => {
           onValueChange(event.target.value);
-          setOpen(true);
+          openDropdown();
         }}
         onBlur={() => {
           window.setTimeout(() => {
@@ -478,6 +468,15 @@ function ProtocolComboInput({
           }
         }}
       />
+      <button
+        type="button"
+        className="absolute inset-y-0 right-2 inline-flex items-center justify-center rounded-md px-1 text-muted-foreground hover:text-foreground"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={toggleDropdown}
+        aria-label="展开协议列表"
+      >
+        <ChevronDown className="size-4" />
+      </button>
 
       {open ? (
         <div className="absolute inset-x-0 top-[calc(100%+0.25rem)] z-50 max-h-60 w-full overflow-y-auto rounded-[var(--radius-lg)] border border-border bg-popover p-1 shadow-console">
@@ -499,21 +498,11 @@ function ProtocolComboInput({
               暂无匹配协议
             </div>
           )}
-
-          {current && !hasExactMatch ? (
-            <button
-              type="button"
-              className="mt-1 flex w-full min-w-0 items-center justify-between gap-2 rounded-md border border-dashed border-border/80 px-3 py-2 text-left text-sm hover:bg-muted"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => void commit(current)}
-            >
-              <span className="min-w-0 truncate">使用 “{current}”</span>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                新建 workspace
-              </span>
-            </button>
-          ) : null}
         </div>
+      ) : null}
+
+      {current && !matched ? (
+        <p className="mt-2 text-xs text-warning">必须完全匹配已有协议资产名后才能提交。</p>
       ) : null}
     </div>
   );
@@ -536,7 +525,6 @@ export function OfflineStudioView(): JSX.Element {
   const [kbKeyword, setKbKeyword] = useState("");
   const [selectedKbEntryId, setSelectedKbEntryId] = useState("");
   const [riskUploadProtocol, setRiskUploadProtocol] = useState("");
-  const [protocolSpaceWarning, setProtocolSpaceWarning] = useState<string | null>(null);
 
   useOperationLogDockSync(
     [
@@ -566,40 +554,39 @@ export function OfflineStudioView(): JSX.Element {
     return Array.from(new Set(list));
   }, [protocolsQuery.data]);
 
+  const selectedVuldocProtocol = resolveExistingProtocol(vuldocProtocol, protocolOptions);
+
   const kbSummaryQuery = useQuery({
-    queryKey: ["kb-summary", vuldocProtocol],
-    queryFn: () => kbApi.summary(vuldocProtocol),
-    enabled: Boolean(vuldocProtocol),
+    queryKey: ["kb-summary", selectedVuldocProtocol],
+    queryFn: () => kbApi.summary(selectedVuldocProtocol || ""),
+    enabled: Boolean(selectedVuldocProtocol),
   });
   const kbGraphQuery = useQuery({
-    queryKey: ["kb-graph", vuldocProtocol],
-    queryFn: () => kbApi.graph(vuldocProtocol),
-    enabled: Boolean(vuldocProtocol),
+    queryKey: ["kb-graph", selectedVuldocProtocol],
+    queryFn: () => kbApi.graph(selectedVuldocProtocol || ""),
+    enabled: Boolean(selectedVuldocProtocol),
   });
   const kbTimelineQuery = useQuery({
-    queryKey: ["kb-timeline", vuldocProtocol],
-    queryFn: () => kbApi.timeline(vuldocProtocol),
-    enabled: Boolean(vuldocProtocol),
+    queryKey: ["kb-timeline", selectedVuldocProtocol],
+    queryFn: () => kbApi.timeline(selectedVuldocProtocol || ""),
+    enabled: Boolean(selectedVuldocProtocol),
   });
   const vuldocsQuery = useQuery({
-    queryKey: ["vuldocs", vuldocProtocol],
-    queryFn: () => vuldocsApi.list(vuldocProtocol),
-    enabled: Boolean(vuldocProtocol),
+    queryKey: ["vuldocs", selectedVuldocProtocol],
+    queryFn: () => vuldocsApi.list(selectedVuldocProtocol || ""),
+    enabled: Boolean(selectedVuldocProtocol),
   });
   const kbSearchQuery = useQuery({
-    queryKey: ["kb-search", vuldocProtocol, kbKeyword],
+    queryKey: ["kb-search", selectedVuldocProtocol, kbKeyword],
     queryFn: () =>
-      kbApi.search(vuldocProtocol, { keyword: kbKeyword, limit: 50 }),
-    enabled: Boolean(vuldocProtocol),
+      kbApi.search(selectedVuldocProtocol || "", { keyword: kbKeyword, limit: 50 }),
+    enabled: Boolean(selectedVuldocProtocol),
   });
 
   const protocolForm = useForm<z.infer<typeof protocolSchema>>({
     resolver: zodResolver(protocolSchema),
     defaultValues: {
       protocol: "",
-      source_path: "",
-      output_path: "",
-      name: "protocol_spec.json",
       content: "",
       use_llm: true,
     },
@@ -608,10 +595,7 @@ export function OfflineStudioView(): JSX.Element {
     resolver: zodResolver(seedsSchema),
     defaultValues: {
       protocol: "",
-      spec_path: "",
-      spec_dir: "",
       keyword: "",
-      output_dir: "",
       count: 8,
       use_kb_assist: true,
       allow_fallback: true,
@@ -621,8 +605,6 @@ export function OfflineStudioView(): JSX.Element {
     resolver: zodResolver(riskAnalyzeSchema),
     defaultValues: {
       protocol: "",
-      source_path: "",
-      output_path: "",
       max_workers: 4,
       llm_concurrency: 2,
       timeout_sec: 1800,
@@ -633,15 +615,12 @@ export function OfflineStudioView(): JSX.Element {
   });
   const riskPreviewForm = useForm<z.infer<typeof riskPreviewSchema>>({
     resolver: zodResolver(riskPreviewSchema),
-    defaultValues: { protocol: "", analysis_path: "" },
+    defaultValues: { protocol: "" },
   });
   const instrumentForm = useForm<z.infer<typeof instrumentSchema>>({
     resolver: zodResolver(instrumentSchema),
     defaultValues: {
       protocol: "",
-      source_path: "",
-      analysis_path: "",
-      output_path: "",
       in_place: false,
       compile_check: true,
       strict_ast_validation: true,
@@ -651,16 +630,35 @@ export function OfflineStudioView(): JSX.Element {
     resolver: zodResolver(buildPlanSchema),
     defaultValues: {
       protocol: "",
-      source_ref: "",
       compiler: "afl-clang-fast",
       instrumentation_mode: "llvm",
       use_llm: false,
-      input_ref: "",
-      dict_ref: "",
     },
   });
 
-  const buildProtocol = buildPlanForm.watch("protocol").trim();
+  const protocolInputValue = protocolForm.watch("protocol");
+  const seedsProtocolInputValue = seedsForm.watch("protocol");
+  const riskAnalyzeProtocolInputValue = riskAnalyzeForm.watch("protocol");
+  const riskPreviewProtocolInputValue = riskPreviewForm.watch("protocol");
+  const instrumentProtocolInputValue = instrumentForm.watch("protocol");
+  const buildProtocolInputValue = buildPlanForm.watch("protocol");
+
+  const selectedProtocolForAnalyze = resolveExistingProtocol(protocolInputValue, protocolOptions);
+  const selectedProtocolForSeeds = resolveExistingProtocol(seedsProtocolInputValue, protocolOptions);
+  const selectedProtocolForRiskAnalyze = resolveExistingProtocol(riskAnalyzeProtocolInputValue, protocolOptions);
+  const selectedProtocolForRiskPreview = resolveExistingProtocol(riskPreviewProtocolInputValue, protocolOptions);
+  const selectedProtocolForInstrument = resolveExistingProtocol(instrumentProtocolInputValue, protocolOptions);
+  const selectedProtocolForRiskUpload = resolveExistingProtocol(riskUploadProtocol, protocolOptions);
+  const buildProtocol = resolveExistingProtocol(buildProtocolInputValue, protocolOptions) ?? "";
+
+  const protocolAssets = useMemo(() => buildProtocolAssetBindings(selectedProtocolForAnalyze), [selectedProtocolForAnalyze]);
+  const seedsAssets = useMemo(() => buildProtocolAssetBindings(selectedProtocolForSeeds), [selectedProtocolForSeeds]);
+  const riskAnalyzeAssets = useMemo(() => buildProtocolAssetBindings(selectedProtocolForRiskAnalyze), [selectedProtocolForRiskAnalyze]);
+  const riskPreviewAssets = useMemo(() => buildProtocolAssetBindings(selectedProtocolForRiskPreview), [selectedProtocolForRiskPreview]);
+  const instrumentAssets = useMemo(() => buildProtocolAssetBindings(selectedProtocolForInstrument), [selectedProtocolForInstrument]);
+  const riskUploadAssets = useMemo(() => buildProtocolAssetBindings(selectedProtocolForRiskUpload), [selectedProtocolForRiskUpload]);
+  const buildAssets = useMemo(() => buildProtocolAssetBindings(buildProtocol), [buildProtocol]);
+
   const buildProbeQuery = useQuery({
     queryKey: ["build-probe", buildProtocol],
     queryFn: () => buildAssistantApi.probe(buildProtocol),
@@ -703,159 +701,12 @@ export function OfflineStudioView(): JSX.Element {
   const setOp = (tab: OfflineTab, id: string): void =>
     setOperationIds((state) => ({ ...state, [tab]: id }));
 
-  const applySeedSpecPaths = ({
-    protocol,
-    specDir,
-    specPath,
-  }: {
-    protocol?: string;
-    specDir?: string;
-    specPath?: string;
-  }): void => {
-    if (protocol) {
-      seedsForm.setValue("protocol", protocol, {
-        shouldDirty: true,
-        shouldValidate: true,
-      });
-    }
-
-    // spec_dir 必须保持目录语义。后端会校验 Path(spec_dir).exists()，传具体 JSON 文件会报错。
-    if (specDir) {
-      seedsForm.setValue("spec_dir", specDir, {
-        shouldDirty: true,
-        shouldValidate: true,
-      });
-    }
-
-    // spec_path 是精确规范文件路径；若后端返回 workspace_path/latest_spec_path，则这里填具体 JSON。
-    if (specPath) {
-      seedsForm.setValue("spec_path", specPath, {
-        shouldDirty: true,
-        shouldValidate: true,
-      });
-    }
-  };
-
-  const resolveSeedsProtocolWorkspace = async (rawProtocol: string): Promise<void> => {
-    const requestedProtocol = normalizeProtocolText(rawProtocol);
-    if (!requestedProtocol) return;
-
-    try {
-      const summary = await protocolsApi.getProtocolSummary(requestedProtocol);
-      const protocol = normalizeProtocolText(summary.protocol) || requestedProtocol;
-      const root = typeof summary.root === "string" ? summary.root : "";
-      const specDir = joinServerPath(root, "specs");
-      const maybeLatestSpec = latestSpecPathFromSummary(summary as Record<string, unknown>);
-
-      applySeedSpecPaths({
-        protocol,
-        specDir,
-        specPath: maybeLatestSpec,
-      });
-
-      await protocolsQuery.refetch();
-    } catch (error) {
-      console.warn("Failed to resolve protocol workspace for seeds form", error);
-    }
-  };
-
-  const resolveVuldocProtocolWorkspace = async (rawProtocol: string): Promise<void> => {
-    const requestedProtocol = normalizeProtocolText(rawProtocol);
-    if (!requestedProtocol) return;
-
-    try {
-      const summary = await protocolsApi.getProtocolSummary(requestedProtocol);
-      const protocol = normalizeProtocolText(summary.protocol) || requestedProtocol;
-
-      setVuldocProtocol(protocol);
-      await protocolsQuery.refetch();
-    } catch (error) {
-      console.warn("Failed to resolve protocol workspace for VulDoc form", error);
-    }
-  };
-
-  const applyRiskAnalysisPath = (analysisPath: string): void => {
-    const normalizedPath = analysisPath.trim();
-    if (!normalizedPath) return;
-
-    riskPreviewForm.setValue("analysis_path", normalizedPath, {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-    instrumentForm.setValue("analysis_path", normalizedPath, {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-  };
-
-  const resolveRiskProtocolWorkspace = async (
-    rawProtocol: string,
-    options: {
-      updateRiskAnalyze?: boolean;
-      updateRiskPreview?: boolean;
-      updateInstrument?: boolean;
-      updateRiskUpload?: boolean;
-      loadLatestAnalysis?: boolean;
-    } = {},
-  ): Promise<void> => {
-    const requestedProtocol = normalizeProtocolText(rawProtocol);
-    if (!requestedProtocol) return;
-
-    try {
-      const summary = await protocolsApi.getProtocolSummary(requestedProtocol);
-      const protocol = normalizeProtocolText(summary.protocol) || requestedProtocol;
-
-      if (options.updateRiskAnalyze ?? true) {
-        riskAnalyzeForm.setValue("protocol", protocol, {
-          shouldDirty: true,
-          shouldValidate: true,
-        });
-      }
-      if (options.updateRiskPreview ?? true) {
-        riskPreviewForm.setValue("protocol", protocol, {
-          shouldDirty: true,
-          shouldValidate: true,
-        });
-      }
-      if (options.updateInstrument ?? true) {
-        instrumentForm.setValue("protocol", protocol, {
-          shouldDirty: true,
-          shouldValidate: true,
-        });
-      }
-      if (options.updateRiskUpload) {
-        setRiskUploadProtocol(protocol);
-      }
-
-      const refreshed = await protocolsQuery.refetch();
-      const latestOptions = refreshed.data ?? protocolOptions;
-      const matched = hasProtocolMatch(protocol, latestOptions);
-
-      if ((options.loadLatestAnalysis ?? true) && matched) {
-        try {
-          const preview = await offlineApi.riskPreview({
-            protocol,
-            analysis_path: null,
-            operation_id: createOperationId("risk-autofill"),
-          });
-          applyRiskAnalysisPath(riskAnalysisPathFromResponse(preview));
-        } catch (error) {
-          console.warn("Failed to resolve latest risk analysis path for protocol", error);
-        }
-      }
-    } catch (error) {
-      console.warn("Failed to resolve risk protocol workspace", error);
-    }
-  };
-
   const protocolMutation = useMutation({
     mutationFn: offlineApi.protocolAnalyze,
     onSuccess: async (data: ProtocolAnalyzeResponse) => {
       const specPath = protocolPrimaryPathFromResponse(data);
-      const workspaceSpecPath = protocolWorkspaceSpecPathFromResponse(data);
       const relatedPaths = protocolRelatedPathsFromResponse(data);
       const protocolValue = protocolNameFromResponse(data) || protocolForm.getValues("protocol");
-      const specDir = serverDirname(workspaceSpecPath || specPath);
 
       addReference({
         type: "protocol",
@@ -865,24 +716,15 @@ export function OfflineStudioView(): JSX.Element {
         data,
       });
 
-      applySeedSpecPaths({
-        protocol: protocolValue,
-        specDir,
-        specPath: workspaceSpecPath || specPath,
-      });
-
-      riskAnalyzeForm.setValue("protocol", protocolValue);
-      riskPreviewForm.setValue("protocol", protocolValue);
-      instrumentForm.setValue("protocol", protocolValue);
+      seedsForm.setValue("protocol", protocolValue, { shouldDirty: true, shouldValidate: true });
+      riskAnalyzeForm.setValue("protocol", protocolValue, { shouldDirty: true, shouldValidate: true });
+      riskPreviewForm.setValue("protocol", protocolValue, { shouldDirty: true, shouldValidate: true });
+      instrumentForm.setValue("protocol", protocolValue, { shouldDirty: true, shouldValidate: true });
+      buildPlanForm.setValue("protocol", protocolValue, { shouldDirty: true, shouldValidate: true });
       setVuldocProtocol(protocolValue);
+      setRiskUploadProtocol(protocolValue);
 
-      const refreshed = await protocolsQuery.refetch();
-      const list = refreshed.data ?? [];
-      setProtocolSpaceWarning(
-        protocolValue && !list.includes(protocolValue)
-          ? "后端未创建协议空间，请检查协议分析请求中的 protocol 字段。"
-          : null,
-      );
+      await protocolsQuery.refetch();
     },
   });
 
@@ -932,7 +774,6 @@ export function OfflineStudioView(): JSX.Element {
         shouldValidate: true,
       });
       setRiskUploadProtocol(protocol);
-      applyRiskAnalysisPath(analysisPath);
     },
   });
 
@@ -949,7 +790,6 @@ export function OfflineStudioView(): JSX.Element {
         data,
       });
 
-      applyRiskAnalysisPath(analysisPath);
     },
   });
 
@@ -1057,6 +897,8 @@ export function OfflineStudioView(): JSX.Element {
   const kbNodeKinds = countByField(kbGraphQuery.data?.nodes, "type", "node");
   const kbEdgeKinds = countByField(kbGraphQuery.data?.edges, "type", "edge");
   const topCweBars = topMetricBars(summary?.by_cwe, 6);
+  const topCweLabels = topCweBars.map((item) => item.name);
+  const topCweValues = topCweBars.map((item) => item.value);
   const allKbEntries = useMemo(() => {
     const merged = [...topKbEntries, ...kbEntries];
     const seen = new Map<string, KbEntry>();
@@ -1103,13 +945,13 @@ export function OfflineStudioView(): JSX.Element {
       <PageHeader
         eyebrow="协议准备工作台"
         title="协议准备工作台"
-        description="Fuzz离线分析子功能，用于启动在线模糊测试前的协议相关信息分析整理，以实现多源知识增强"
+        description="保留离线分析子功能，并新增 BuildPlan、BuildRun、LaunchProfile 的准备链路。"
       />
 
       <Card>
         <CardHeader>
           <CardTitle>当前准备上下文</CardTitle>
-          <CardDescription>使用 `workspace://` 引用虚拟文件树中的协议资产</CardDescription>
+          <CardDescription>推荐优先使用 `workspace://` 引用；旧字段路径仍保持兼容。</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
@@ -1118,7 +960,7 @@ export function OfflineStudioView(): JSX.Element {
           </div>
           <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Source Ref</p>
-            <p className="mt-2 break-all text-sm">{buildPlanForm.watch("source_ref") || "-"}</p>
+            <p className="mt-2 break-all text-sm">{buildAssets?.buildSourceRef || "-"}</p>
           </div>
           <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Latest LaunchProfile</p>
@@ -1186,35 +1028,67 @@ export function OfflineStudioView(): JSX.Element {
                 <form
                   className="grid gap-4 md:grid-cols-2"
                   onSubmit={protocolForm.handleSubmit((values) => {
+                    const protocol = resolveExistingProtocol(values.protocol, protocolOptions);
+                    const assets = buildProtocolAssetBindings(protocol);
+                    if (!protocol || !assets) {
+                      protocolForm.setError("protocol", { type: "validate", message: "请选择已有协议资产名" });
+                      return;
+                    }
                     const operation_id = createOperationId("protocol");
                     setOp("protocol", operation_id);
                     protocolMutation.mutate({
-                      protocol: values.protocol.trim(),
-                      source_path: values.source_path.trim(),
-                      output_path: optionalPath(values.output_path),
-                      name: values.name?.trim() || "protocol_spec.json",
+                      protocol,
+                      source_ref: assets.sourceRef,
+                      output_ref: assets.specFileRef,
+                      name: FIXED_PROTOCOL_SPEC_NAME,
                       content: values.content?.trim() || undefined,
                       operation_id,
                       use_llm: values.use_llm,
                     });
                   })}
                 >
+                  <FormField
+                    label="协议名称 protocol"
+                    description="仅允许选择已有协议资产，确定后自动绑定 source/ 与 specs/ 预设路径。"
+                  >
+                    <ProtocolComboInput
+                      value={protocolForm.watch("protocol")}
+                      options={protocolOptions}
+                      onOpen={() => void protocolsQuery.refetch()}
+                      onValueChange={(value) => {
+                        protocolForm.clearErrors("protocol");
+                        protocolForm.setValue("protocol", value, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                      }}
+                      onCommit={async (value) => {
+                        protocolForm.clearErrors("protocol");
+                        protocolForm.setValue("protocol", value, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                        await protocolsQuery.refetch();
+                      }}
+                    />
+                  </FormField>
+                  <FixedPathField
+                    label="源码路径 source_ref"
+                    description="固定引用协议资产模型中的 source/ 虚拟目录。"
+                    value={protocolAssets?.sourceDisplay ?? "选择协议后自动生成"}
+                  />
+                  <FixedPathField
+                    label="规范输出 output_ref"
+                    description="固定保存到 specs/protocol_spec.json。"
+                    value={protocolAssets?.specFileDisplay ?? "选择协议后自动生成"}
+                  />
+                  <FixedPathField
+                    label="规范文件名 name"
+                    description="协议规范提取固定使用预设文件名。"
+                    value={FIXED_PROTOCOL_SPEC_NAME}
+                  />
                   <div className="md:col-span-2">
-                    <FormField label="源码路径" description="后端机器上的源码路径，不是浏览器本机路径">
-                      <Input {...protocolForm.register("source_path")} />
-                    </FormField>
-                  </div>
-                  <FormField label="输出路径" description="后端机器路径；可空">
-                    <Input {...protocolForm.register("output_path")} />
-                  </FormField>
-                  <FormField label="协议名称 protocol" description="提交字段为 protocol，不再使用 protocol_name">
-                    <Input list="protocol-list" {...protocolForm.register("protocol")} />
-                  </FormField>
-                  <FormField label="规范文件名 name">
-                    <Input {...protocolForm.register("name")} />
-                  </FormField>
-                  <div className="md:col-span-2">
-                    <FormField label="手动提供规范内容 content" description="可选；填写后后端会直接保存该内容，留空时后端按 source_path 扫描源码生成规范。">
+                    <FormField label="手动提供规范内容 content" description="可选；填写后后端会直接保存到预设规范路径，留空时后端按 source/ 扫描源码生成规范。">
                       <Textarea {...protocolForm.register("content")} />
                     </FormField>
                   </div>
@@ -1230,7 +1104,7 @@ export function OfflineStudioView(): JSX.Element {
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <Button type="submit" disabled={protocolMutation.isPending}>
+                    <Button type="submit" disabled={protocolMutation.isPending || !protocolAssets}>
                       <ScanSearch className="size-4" />
                       {protocolMutation.isPending
                         ? "分析中..."
@@ -1261,7 +1135,7 @@ export function OfflineStudioView(): JSX.Element {
                               ...protocolMutation.data,
                               frontend_reference: {
                                 primaryPath: protocolPrimaryPathFromResponse(protocolMutation.data),
-                                workspaceSpecPath: protocolWorkspaceSpecPathFromResponse(protocolMutation.data),
+                                modelSpecRef: protocolAssets?.specFileRef ?? null,
                                 relatedPaths: protocolRelatedPathsFromResponse(protocolMutation.data),
                               },
                             }
@@ -1273,7 +1147,6 @@ export function OfflineStudioView(): JSX.Element {
                 </CardContent>
               </Card>
             </div>
-            {protocolSpaceWarning ? <div className="xl:col-span-2 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">{protocolSpaceWarning}</div> : null}
           </div>
         </TabsContent>
 
@@ -1283,21 +1156,26 @@ export function OfflineStudioView(): JSX.Element {
               <CardHeader>
                 <CardTitle>初始种子生成</CardTitle>
                 <CardDescription>
-                  spec_path 与 spec_dir 可同时提交，优先使用 spec_path，spec_path 为空时从 spec_dir 扫描规范读取。
+                  规范输入与种子输出均固定绑定到协议资产模型预设路径。
                 </CardDescription>
               </CardHeader>
               <CardContent className="min-h-0 flex-1 overflow-y-auto">
                 <form
                   className="grid gap-4 md:grid-cols-2"
                   onSubmit={seedsForm.handleSubmit((values) => {
+                    const protocol = resolveExistingProtocol(values.protocol, protocolOptions);
+                    const assets = buildProtocolAssetBindings(protocol);
+                    if (!protocol || !assets) {
+                      seedsForm.setError("protocol", { type: "validate", message: "请选择已有协议资产名" });
+                      return;
+                    }
                     const operation_id = createOperationId("seeds");
                     setOp("seeds", operation_id);
                     seedsMutation.mutate({
-                      protocol: values.protocol,
-                      spec_path: optionalPath(values.spec_path),
-                      spec_dir: optionalPath(values.spec_dir),
+                      protocol,
+                      spec_ref: assets.specFileRef,
                       keyword: values.use_kb_assist ? values.keyword?.trim() ?? "" : "",
-                      output_dir: optionalPath(values.output_dir),
+                      output_ref: assets.seedsOutputRef,
                       count: values.count,
                       allow_fallback: values.use_kb_assist ? values.allow_fallback : false,
                       use_kb_assist: values.use_kb_assist,
@@ -1307,36 +1185,44 @@ export function OfflineStudioView(): JSX.Element {
                 >
                   <FormField
                     label="协议名"
-                    description="可选择工作区已有协议，也可手动输入新协议名 | 确认后后端会创建/确认 工作空间"
+                    description="必须完全匹配已有协议资产，规范与输出目录按协议资产模型自动绑定。"
                   >
                     <ProtocolComboInput
                       value={seedsForm.watch("protocol")}
                       options={protocolOptions}
                       onOpen={() => void protocolsQuery.refetch()}
                       onValueChange={(value) => {
+                        seedsForm.clearErrors("protocol");
                         seedsForm.setValue("protocol", value, {
                           shouldDirty: true,
                           shouldValidate: true,
                         });
                       }}
-                      onCommit={resolveSeedsProtocolWorkspace}
+                      onCommit={async (value) => {
+                        seedsForm.clearErrors("protocol");
+                        seedsForm.setValue("protocol", value, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                        await protocolsQuery.refetch();
+                      }}
                     />
                   </FormField>
-                  <FormField
-                    label="规范文件路径 spec_path"
-                    description="精确规范文件路径 | 优先回填执行成功缓存的规范路径 | 手动填写时优先级最高"
-                  >
-                    <Input {...seedsForm.register("spec_path")} />
-                  </FormField>
-                  <FormField
+                  <FixedPathField
+                    label="规范文件 spec_ref"
+                    description="固定读取 specs/protocol_spec.json。"
+                    value={seedsAssets?.specFileDisplay ?? "选择协议后自动生成"}
+                  />
+                  <FixedPathField
                     label="规范目录 spec_dir"
-                    description="选择或输入协议名后自动填入缓存目录 | spec_path 为空时后端会从工作区缓存池扫描规范。"
-                  >
-                    <Input {...seedsForm.register("spec_dir")} />
-                  </FormField>
-                  <FormField label="输出目录" description="后端主机上的种子输出目录">
-                    <Input {...seedsForm.register("output_dir")} />
-                  </FormField>
+                    description="协议规范目录固定为 specs/。"
+                    value={seedsAssets?.specsDirDisplay ?? "选择协议后自动生成"}
+                  />
+                  <FixedPathField
+                    label="输出目录 output_ref"
+                    description="固定写入 seeds/bin/ 目录。"
+                    value={seedsAssets?.seedsOutputDisplay ?? "选择协议后自动生成"}
+                  />
                   <FormField label="关键词">
                     <Input
                       disabled={!seedsForm.watch("use_kb_assist")}
@@ -1383,11 +1269,6 @@ export function OfflineStudioView(): JSX.Element {
                     </Button>
                   </div>
                 </form>
-                <datalist id="protocol-list">
-                  {(protocolsQuery.data ?? [""]).map((p) => (
-                    <option key={p} value={p} />
-                  ))}
-                </datalist>
               </CardContent>
             </Card>
             <div className="min-h-[400px] flex-1">
@@ -1412,6 +1293,7 @@ export function OfflineStudioView(): JSX.Element {
           </div>
         </TabsContent>
 
+        
         <TabsContent value="risk-analyze">
           <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
             <Card className="flex min-h-[400px] flex-1 flex-col overflow-hidden">
@@ -1425,12 +1307,18 @@ export function OfflineStudioView(): JSX.Element {
                 <form
                   className="grid gap-4 md:grid-cols-2"
                   onSubmit={riskAnalyzeForm.handleSubmit((values) => {
+                    const protocol = resolveExistingProtocol(values.protocol, protocolOptions);
+                    const assets = buildProtocolAssetBindings(protocol);
+                    if (!protocol || !assets) {
+                      riskAnalyzeForm.setError("protocol", { type: "validate", message: "请选择已有协议资产名" });
+                      return;
+                    }
                     const operation_id = createOperationId("risk");
                     setOp("risk-analyze", operation_id);
                     riskAnalyzeMutation.mutate({
-                      protocol: values.protocol.trim(),
-                      source_path: values.source_path.trim(),
-                      output_path: optionalPath(values.output_path),
+                      protocol,
+                      source_ref: assets.sourceRef,
+                      output_ref: assets.riskAnalysisRef,
                       operation_id,
                       max_workers: values.max_workers,
                       llm_concurrency: values.llm_concurrency,
@@ -1443,37 +1331,39 @@ export function OfflineStudioView(): JSX.Element {
                 >
                   <FormField
                     label="协议名 protocol"
-                    description="可选择已有协议，也可手动输入 | 若匹配已有协议，会尝试读取该协议最近一次分析结果"
+                    description="必须完全匹配已有协议资产，源码与分析输出路径按协议资产模型自动绑定。"
                   >
                     <ProtocolComboInput
                       value={riskAnalyzeForm.watch("protocol")}
                       options={protocolOptions}
                       onOpen={() => void protocolsQuery.refetch()}
                       onValueChange={(value) => {
+                        riskAnalyzeForm.clearErrors("protocol");
                         riskAnalyzeForm.setValue("protocol", value, {
                           shouldDirty: true,
                           shouldValidate: true,
                         });
                       }}
-                      onCommit={(value) =>
-                        resolveRiskProtocolWorkspace(value, {
-                          updateRiskAnalyze: true,
-                          updateRiskPreview: true,
-                          updateInstrument: true,
-                          updateRiskUpload: true,
-                          loadLatestAnalysis: true,
-                        })
-                      }
+                      onCommit={async (value) => {
+                        riskAnalyzeForm.clearErrors("protocol");
+                        riskAnalyzeForm.setValue("protocol", value, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                        await protocolsQuery.refetch();
+                      }}
                     />
                   </FormField>
-                  <div className="md:col-span-2">
-                    <FormField label="源码路径 source_path" description="后端主机上的源码目录">
-                      <Input {...riskAnalyzeForm.register("source_path")} />
-                    </FormField>
-                  </div>
-                  <FormField label="输出路径 output_path" description="后端主机路径；可空">
-                    <Input {...riskAnalyzeForm.register("output_path")} />
-                  </FormField>
+                  <FixedPathField
+                    label="源码路径 source_ref"
+                    description="固定引用协议资产模型中的 source/ 目录。"
+                    value={riskAnalyzeAssets?.sourceDisplay ?? "选择协议后自动生成"}
+                  />
+                  <FixedPathField
+                    label="分析输出 output_ref"
+                    description="固定写入 risk/analyses/final_analysis.json。"
+                    value={riskAnalyzeAssets?.riskAnalysisDisplay ?? "选择协议后自动生成"}
+                  />
                   <details className="md:col-span-2 rounded-xl border border-border/60 bg-background/50 p-4">
                     <summary className="cursor-pointer text-sm font-medium">高级选项：并发 pipeline / LLM / chunk</summary>
                     <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -1488,7 +1378,7 @@ export function OfflineStudioView(): JSX.Element {
                   <div className="md:col-span-2">
                     <Button
                       type="submit"
-                      disabled={riskAnalyzeMutation.isPending}
+                      disabled={riskAnalyzeMutation.isPending || !riskAnalyzeAssets}
                     >
                       <ScanSearch className="size-4" />
                       {riskAnalyzeMutation.isPending
@@ -1522,7 +1412,8 @@ export function OfflineStudioView(): JSX.Element {
           </div>
         </TabsContent>
 
-<TabsContent value="risk-preview">
+
+        <TabsContent value="risk-preview">
           <div className="grid gap-4 xl:grid-cols-[0.82fr_1.18fr_0.9fr]">
             <Card className="flex min-h-[30rem] flex-col overflow-hidden">
               <CardHeader className="border-b border-border/50">
@@ -1533,47 +1424,52 @@ export function OfflineStudioView(): JSX.Element {
                 <form
                   className="space-y-4"
                   onSubmit={riskPreviewForm.handleSubmit((values) => {
+                    const protocol = resolveExistingProtocol(values.protocol, protocolOptions);
+                    const assets = buildProtocolAssetBindings(protocol);
+                    if (!protocol || !assets) {
+                      riskPreviewForm.setError("protocol", { type: "validate", message: "请选择已有协议资产名" });
+                      return;
+                    }
                     const operation_id = createOperationId("preview");
                     setOp("risk-preview", operation_id);
                     riskPreviewMutation.mutate({
-                      protocol: values.protocol.trim(),
-                      analysis_path: optionalPath(values.analysis_path),
+                      protocol,
+                      analysis_ref: assets.riskAnalysisRef,
                       operation_id,
                     });
                   })}
                 >
                   <FormField
                     label="协议 protocol"
-                    description="匹配已有协议时，会自动补全最近的分析路径。"
+                    description="必须完全匹配已有协议资产，分析结果固定读取 risk/analyses/final_analysis.json。"
                   >
                     <ProtocolComboInput
                       value={riskPreviewForm.watch("protocol")}
                       options={protocolOptions}
                       onOpen={() => void protocolsQuery.refetch()}
                       onValueChange={(value) => {
+                        riskPreviewForm.clearErrors("protocol");
                         riskPreviewForm.setValue("protocol", value, {
                           shouldDirty: true,
                           shouldValidate: true,
                         });
                       }}
-                      onCommit={(value) =>
-                        resolveRiskProtocolWorkspace(value, {
-                          updateRiskAnalyze: false,
-                          updateRiskPreview: true,
-                          updateInstrument: true,
-                          updateRiskUpload: true,
-                          loadLatestAnalysis: true,
-                        })
-                      }
+                      onCommit={async (value) => {
+                        riskPreviewForm.clearErrors("protocol");
+                        riskPreviewForm.setValue("protocol", value, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                        await protocolsQuery.refetch();
+                      }}
                     />
                   </FormField>
-                  <FormField
-                    label="analysis_path"
-                    description="可留空，后端会尝试读取最近一次风险分析结果。"
-                  >
-                    <Input {...riskPreviewForm.register("analysis_path")} />
-                  </FormField>
-                  <Button type="submit" className="w-full" disabled={riskPreviewMutation.isPending}>
+                  <FixedPathField
+                    label="analysis_ref"
+                    description="固定读取 risk/analyses/final_analysis.json。"
+                    value={riskPreviewAssets?.riskAnalysisDisplay ?? "选择协议后自动生成"}
+                  />
+                  <Button type="submit" className="w-full" disabled={riskPreviewMutation.isPending || !riskPreviewAssets}>
                     <CheckCircle2 className="size-4" />
                     {riskPreviewMutation.isPending ? "读取中..." : "查看预览"}
                   </Button>
@@ -1607,7 +1503,7 @@ export function OfflineStudioView(): JSX.Element {
                 <CardContent className="space-y-4 p-5">
                   <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">analysis_path</p>
-                    <p className="mt-2 break-all text-sm text-foreground">{previewSummary.analysis_path || "-"}</p>
+                    <p className="mt-2 break-all text-sm text-foreground">{typeof previewSummary.analysis_path === "string" && previewSummary.analysis_path.trim() ? previewSummary.analysis_path : typeof riskPreviewAssets?.riskAnalysisDisplay === "string" && riskPreviewAssets.riskAnalysisDisplay.trim() ? riskPreviewAssets.riskAnalysisDisplay : "-"}</p>
                   </div>
                   <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">preview</p>
@@ -1660,6 +1556,7 @@ export function OfflineStudioView(): JSX.Element {
           </div>
         </TabsContent>
 
+        
         <TabsContent value="risk-upload">
           <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
             <Card className="flex min-h-[400px] flex-1 flex-col overflow-hidden">
@@ -1673,24 +1570,25 @@ export function OfflineStudioView(): JSX.Element {
                 <div className="space-y-4">
                   <FormField
                     label="协议名 protocol"
-                    description="可选择已有协议，也可手动输入；匹配已有协议时自动填充 analysis_path。"
+                    description="必须完全匹配已有协议资产；上传结果将写入该协议预设风险分析位置。"
                   >
                     <ProtocolComboInput
                       value={riskUploadProtocol}
                       options={protocolOptions}
                       onOpen={() => void protocolsQuery.refetch()}
                       onValueChange={setRiskUploadProtocol}
-                      onCommit={(value) =>
-                        resolveRiskProtocolWorkspace(value, {
-                          updateRiskAnalyze: false,
-                          updateRiskPreview: true,
-                          updateInstrument: true,
-                          updateRiskUpload: true,
-                          loadLatestAnalysis: true,
-                        })
-                      }
+                      onCommit={async (value) => {
+                        setRiskUploadProtocol(value);
+                        await protocolsQuery.refetch();
+                      }}
                     />
                   </FormField>
+
+                  <FixedPathField
+                    label="目标分析文件"
+                    description="上传结果将镜像到风险分析预设文件。"
+                    value={riskUploadAssets?.riskAnalysisDisplay ?? "选择协议后自动生成"}
+                  />
 
                   <FormField label="风险结果文件">
                     <Input
@@ -1701,9 +1599,14 @@ export function OfflineStudioView(): JSX.Element {
                         if (!file) return;
 
                         const operationId = createOperationId("risk-upload");
-                        const protocol = normalizeProtocolText(riskUploadProtocol) || "";
+                        const protocol = selectedProtocolForRiskUpload || "";
                         setOp("risk-upload", operationId);
                         setUploadError(undefined);
+
+                        if (!protocol) {
+                          setUploadError(new Error("请选择已有协议资产名后再上传风险结果。"));
+                          return;
+                        }
 
                         try {
                           const response = await uploadRiskJsonFile({
@@ -1737,7 +1640,6 @@ export function OfflineStudioView(): JSX.Element {
                             shouldDirty: true,
                             shouldValidate: true,
                           });
-                          applyRiskAnalysisPath(analysisPath);
                           await protocolsQuery.refetch();
                         } catch (error) {
                           setUploadError(error);
@@ -1765,7 +1667,8 @@ export function OfflineStudioView(): JSX.Element {
           </div>
         </TabsContent>
 
-<TabsContent value="instrument">
+
+        <TabsContent value="instrument">
           <div className="grid gap-4 xl:grid-cols-[0.84fr_1.22fr_0.9fr]">
             <Card className="flex min-h-[30rem] flex-col overflow-hidden">
               <CardHeader className="border-b border-border/50">
@@ -1776,13 +1679,19 @@ export function OfflineStudioView(): JSX.Element {
                 <form
                   className="grid gap-4"
                   onSubmit={instrumentForm.handleSubmit((values) => {
+                    const protocol = resolveExistingProtocol(values.protocol, protocolOptions);
+                    const assets = buildProtocolAssetBindings(protocol);
+                    if (!protocol || !assets) {
+                      instrumentForm.setError("protocol", { type: "validate", message: "请选择已有协议资产名" });
+                      return;
+                    }
                     const operation_id = createOperationId("instrument");
                     setOp("instrument", operation_id);
                     instrumentMutation.mutate({
-                      protocol: values.protocol.trim(),
-                      source_path: optionalPath(values.source_path),
-                      analysis_path: optionalPath(values.analysis_path),
-                      output_path: optionalPath(values.output_path),
+                      protocol,
+                      source_ref: assets.sourceRef,
+                      analysis_ref: assets.riskAnalysisRef,
+                      output_ref: assets.instrumentedOutputRef,
                       in_place: values.in_place,
                       operation_id,
                       compile_check: values.compile_check,
@@ -1792,44 +1701,44 @@ export function OfflineStudioView(): JSX.Element {
                 >
                   <FormField
                     label="协议 protocol"
-                    description="匹配已有协议时自动补全 analysis_path。"
+                    description="必须完全匹配已有协议资产，插桩输入输出路径按协议资产模型自动绑定。"
                   >
                     <ProtocolComboInput
                       value={instrumentForm.watch("protocol")}
                       options={protocolOptions}
                       onOpen={() => void protocolsQuery.refetch()}
                       onValueChange={(value) => {
+                        instrumentForm.clearErrors("protocol");
                         instrumentForm.setValue("protocol", value, {
                           shouldDirty: true,
                           shouldValidate: true,
                         });
                       }}
-                      onCommit={(value) =>
-                        resolveRiskProtocolWorkspace(value, {
-                          updateRiskAnalyze: false,
-                          updateRiskPreview: true,
-                          updateInstrument: true,
-                          updateRiskUpload: true,
-                          loadLatestAnalysis: true,
-                        })
-                      }
+                      onCommit={async (value) => {
+                        instrumentForm.clearErrors("protocol");
+                        instrumentForm.setValue("protocol", value, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                        await protocolsQuery.refetch();
+                      }}
                     />
                   </FormField>
-                  <FormField
-                    label="source_path"
-                    description="后端机器路径；目录输入 + 输出路径时后端可复制源码树再插桩。"
-                  >
-                    <Input {...instrumentForm.register("source_path")} />
-                  </FormField>
-                  <FormField
-                    label="analysis_path"
-                    description="可省略，后端会尝试读取最近风险分析结果。"
-                  >
-                    <Input {...instrumentForm.register("analysis_path")} />
-                  </FormField>
-                  <FormField label="output_path" description="省略则按后端逻辑决定输出位置。">
-                    <Input {...instrumentForm.register("output_path")} />
-                  </FormField>
+                  <FixedPathField
+                    label="source_ref"
+                    description="固定引用协议资产模型中的 source/ 目录。"
+                    value={instrumentAssets?.sourceDisplay ?? "选择协议后自动生成"}
+                  />
+                  <FixedPathField
+                    label="analysis_ref"
+                    description="固定读取 risk/analyses/final_analysis.json。"
+                    value={instrumentAssets?.riskAnalysisDisplay ?? "选择协议后自动生成"}
+                  />
+                  <FixedPathField
+                    label="output_ref"
+                    description="固定输出到 risk/instrumented/。"
+                    value={instrumentAssets?.instrumentedOutputDisplay ?? "选择协议后自动生成"}
+                  />
 
                   <div className="grid gap-3">
                     <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/45 px-4 py-3">
@@ -1866,7 +1775,7 @@ export function OfflineStudioView(): JSX.Element {
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={instrumentMutation.isPending}>
+                  <Button type="submit" className="w-full" disabled={instrumentMutation.isPending || !instrumentAssets}>
                     <Wand2 className="size-4" />
                     {instrumentMutation.isPending ? "插桩中..." : "执行插桩"}
                   </Button>
@@ -1876,58 +1785,66 @@ export function OfflineStudioView(): JSX.Element {
                   title: "日志出口",
                   running: instrumentMutation.isPending,
                   operationId: operationIds.instrument,
-                  note: "插桩过程输出与错误详情已统一进入 GlobalLogDock。",
+                  note: "插桩过程输出与失败详情已统一进入 GlobalLogDock。",
                 })}
               </CardContent>
             </Card>
 
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <SummaryCard title="Applied" value={String(instrumentSummary.applied)} hint="accepted insertions" statusColor="teal" />
-                <SummaryCard title="Rejected" value={String(instrumentSummary.rejected)} hint="guarded by backend" statusColor="rose" />
-                <SummaryCard title="Files" value={String(instrumentSummary.changedFiles)} hint="changed files" statusColor="violet" />
-                <SummaryCard title="Warnings" value={String(instrumentSummary.warnings)} hint="validation warnings" statusColor="amber" />
-              </div>
+            <Card className="overflow-hidden">
+              <CardHeader className="border-b border-border/50">
+                <CardTitle>插桩主结果</CardTitle>
+                <CardDescription>中间主栏显示结构化结果和 compile_check 摘要。</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 p-5">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <SummaryCard title="Markers" value={String(instrumentSummary.inserted)} hint="inserted_markers" statusColor="violet" />
+                  <SummaryCard title="Rejected" value={String(instrumentSummary.rejected)} hint="rejected_insertions" statusColor="orange" />
+                  <SummaryCard title="Warnings" value={String(instrumentSummary.warnings)} hint="validation_warnings" statusColor="gold" />
+                  <SummaryCard
+                    title="Compile"
+                    value={instrumentData?.compile_check?.enabled ? (instrumentData?.compile_check?.passed ? "passed" : "failed") : "n/a"}
+                    hint="compile_check"
+                    statusColor={instrumentData?.compile_check?.passed ? "teal" : "coral"}
+                  />
+                </div>
 
+                <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">output_path</p>
+                      <p className="mt-2 break-all text-sm text-foreground">{instrumentData?.output_path ?? instrumentAssets?.instrumentedOutputDisplay ?? "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">plan_path</p>
+                      <p className="mt-2 break-all text-sm text-foreground">{instrumentData?.plan_path ?? "-"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="console-scrollbar max-h-[18rem] overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
+                  <JsonViewer data={instrumentData ?? { status: "idle" }} compact />
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-4">
               <Card className="overflow-hidden">
                 <CardHeader className="border-b border-border/50">
-                  <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="size-4 text-primary" />
-                    插桩报告
-                  </CardTitle>
-                  <CardDescription>主结果展示结构化插桩报告；页面内不再承载日志流。</CardDescription>
+                  <CardTitle>插桩详情</CardTitle>
+                  <CardDescription>将大体量详情折叠到右侧，不影响主结果阅读。</CardDescription>
                 </CardHeader>
-                <CardContent className="p-5">
-                  <InstrumentationReportView data={instrumentData} />
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="space-y-4">
-              <Card className="overflow-hidden">
-                <CardHeader className="border-b border-border/50">
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="size-4 text-primary" />
-                    编译与校验
-                  </CardTitle>
-                  <CardDescription>把 compile_check、warning、输出路径等细节压到侧栏。</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 p-5">
-                  <div className="rounded-2xl border border-border/60 bg-background/45 p-4 text-sm">
+                <CardContent className="space-y-4 p-5">
+                  <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
+                    <p className="font-medium">applied_insertions</p>
+                    <p className="mt-2 text-xs text-muted-foreground">共 {instrumentData?.applied_insertions?.length ?? 0} 条</p>
+                  </div>
+                  <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
+                    <p className="font-medium">rejected_insertions</p>
+                    <p className="mt-2 text-xs text-muted-foreground">共 {instrumentData?.rejected_insertions?.length ?? 0} 条</p>
+                  </div>
+                  <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
                     <p className="font-medium">output_path</p>
-                    <p className="mt-2 break-all text-muted-foreground">{instrumentData?.output_path ?? "-"}</p>
-                  </div>
-                  <div className="rounded-2xl border border-border/60 bg-background/45 p-4 text-sm">
-                    <p className="font-medium">compile_check</p>
-                    <p className="mt-2 text-muted-foreground">
-                      {instrumentData?.compile_check?.enabled
-                        ? `enabled / passed=${String(instrumentData.compile_check.passed)}`
-                        : "disabled"}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-border/60 bg-background/45 p-4 text-sm">
-                    <p className="font-medium">validation_warnings</p>
-                    <p className="mt-2 text-muted-foreground">{instrumentData?.validation_warnings?.length ?? 0} 条</p>
+                    <p className="mt-2 break-all text-muted-foreground">{instrumentData?.output_path ?? instrumentAssets?.instrumentedOutputDisplay ?? "-"}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -1958,19 +1875,22 @@ export function OfflineStudioView(): JSX.Element {
                     <UploadCloud className="size-4 text-primary" />
                     漏洞文档源
                   </CardTitle>
-                  <CardDescription>上传后可进行蒸馏操作，支持搜索具体的文档内容预览</CardDescription>
+                  <CardDescription>左侧保持上传、蒸馏和搜索参数，执行输出统一进入底部 GlobalLogDock。</CardDescription>
                 </CardHeader>
                 <CardContent className="console-scrollbar flex-1 space-y-4 overflow-y-auto p-5">
                   <FormField
                     label="协议名"
-                    description="可选择已有协议，也可手动输入新协议名。"
+                    description="仅允许选择已有协议资产，VulDoc / KB 将写入对应协议预设目录。"
                   >
                     <ProtocolComboInput
                       value={vuldocProtocol}
                       options={protocolOptions}
                       onOpen={() => void protocolsQuery.refetch()}
                       onValueChange={setVuldocProtocol}
-                      onCommit={resolveVuldocProtocolWorkspace}
+                      onCommit={async (value) => {
+                        setVuldocProtocol(value);
+                        await protocolsQuery.refetch();
+                      }}
                     />
                   </FormField>
 
@@ -1987,12 +1907,16 @@ export function OfflineStudioView(): JSX.Element {
 
                   <Button
                     className="w-full"
-                    disabled={!selectedFiles.length || vuldocUploadMutation.isPending}
+                    disabled={!selectedFiles.length || vuldocUploadMutation.isPending || !selectedVuldocProtocol}
                     onClick={() => {
                       const operationId = createOperationId("vuldoc-upload");
                       setOp("vuldocs-kb", operationId);
+                      if (!selectedVuldocProtocol) {
+                        dockLog("warn", "offline", "VulDoc 上传需要先精确匹配一个已有协议资产名");
+                        return;
+                      }
                       vuldocUploadMutation.mutate({
-                        protocol: vuldocProtocol,
+                        protocol: selectedVuldocProtocol,
                         files: selectedFiles,
                         operationId,
                       });
@@ -2026,7 +1950,7 @@ export function OfflineStudioView(): JSX.Element {
                   <Button
                     variant="secondary"
                     className="w-full"
-                    disabled={vuldocDistillMutation.isPending}
+                    disabled={vuldocDistillMutation.isPending || !selectedVuldocProtocol}
                     onClick={() => {
                       const operationId = createOperationId("vuldoc-distill");
                       setOp("vuldocs-kb", operationId);
@@ -2036,7 +1960,7 @@ export function OfflineStudioView(): JSX.Element {
                         .filter(Boolean);
 
                       vuldocDistillMutation.mutate({
-                        protocol: vuldocProtocol,
+                        protocol: selectedVuldocProtocol || "",
                         operationId,
                         docIds: docIds.length ? docIds : undefined,
                         useLlm: distillUseLlm,
@@ -2103,7 +2027,7 @@ export function OfflineStudioView(): JSX.Element {
                       <Database className="size-4 text-primary" />
                       知识摘要与搜索命中
                     </CardTitle>
-                    <CardDescription>上传蒸馏后可查看结果：热门条目、搜索命中和结构化字段</CardDescription>
+                    <CardDescription>中列突出可操作结果：热门条目、搜索命中和结构化字段，不再使用拉长整页的展开块。</CardDescription>
                   </CardHeader>
                   <CardContent className="grid gap-4 p-5 lg:grid-cols-[0.94fr_1.06fr]">
                     <div className="space-y-3">
@@ -2144,7 +2068,7 @@ export function OfflineStudioView(): JSX.Element {
                       <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
                         <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">CWE Top</p>
                         <div className="mt-3">
-                          <BarChart title="CWE Top" labels={topCweBars.labels} values={topCweBars.values} height={244} />
+                          <BarChart title="CWE Top" labels={topCweLabels} values={topCweValues} height={244} />
                         </div>
                       </div>
                     </div>
@@ -2205,7 +2129,7 @@ export function OfflineStudioView(): JSX.Element {
                       <Network className="size-4 text-primary" />
                       图谱与状态摘要
                     </CardTitle>
-                    <CardDescription>统计、引用和已选条目证据</CardDescription>
+                    <CardDescription>右列负责统计、引用和已选条目证据，不再把原始 JSON 大面积铺在页面里。</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4 p-5">
                     <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
@@ -2242,7 +2166,7 @@ export function OfflineStudioView(): JSX.Element {
                 <Card className="overflow-hidden">
                   <CardHeader className="border-b border-border/50">
                     <CardTitle className="text-base">条目证据与引用</CardTitle>
-                    <CardDescription>详情预览</CardDescription>
+                    <CardDescription>主结果之外的详情集中到右侧卡片，并限制为卡片内滚动。</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4 p-5">
                     {!selectedKbEntry ? (
@@ -2300,7 +2224,7 @@ export function OfflineStudioView(): JSX.Element {
                 <Card className="overflow-hidden">
                   <CardHeader className="border-b border-border/50">
                     <CardTitle className="text-base">原始返回快照</CardTitle>
-                    <CardDescription></CardDescription>
+                    <CardDescription>保留调试入口，但限制在独立小卡片中内联滚动。</CardDescription>
                   </CardHeader>
                   <CardContent className="p-5">
                     <div className="console-scrollbar max-h-[16rem] overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
@@ -2321,6 +2245,7 @@ export function OfflineStudioView(): JSX.Element {
           </div>
         </TabsContent>
 
+        
         <TabsContent value="build-fuzz">
           <div className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
             <Card className="overflow-hidden">
@@ -2332,22 +2257,35 @@ export function OfflineStudioView(): JSX.Element {
                 <form
                   className="grid gap-4"
                   onSubmit={buildPlanForm.handleSubmit((values) => {
+                    if (!buildProtocol || !buildAssets) {
+                      buildPlanForm.setError("protocol", { type: "validate", message: "请选择已有协议资产名" });
+                      return;
+                    }
                     const operationId = createOperationId("build-fuzz");
                     setOp("build-fuzz", operationId);
-                    buildPlanMutation.mutate(values);
+                    buildPlanMutation.mutate({
+                      ...values,
+                      protocol: buildProtocol,
+                      source_ref: buildAssets.buildSourceRef,
+                      input_ref: buildAssets.buildInputRef,
+                      dict_ref: buildAssets.dictRef,
+                    } as z.infer<typeof buildPlanSchema> & { source_ref: string; input_ref: string; dict_ref: string });
                   })}
                 >
-                  <FormField label="协议名">
+                  <FormField label="协议名" description="必须完全匹配已有协议资产，构建输入引用按资产模型自动绑定。">
                     <ProtocolComboInput
                       value={buildPlanForm.watch("protocol")}
                       options={protocolOptions}
                       onOpen={() => void protocolsQuery.refetch()}
-                      onValueChange={(value) => buildPlanForm.setValue("protocol", value, { shouldDirty: true, shouldValidate: true })}
-                      onCommit={async (protocol) => {
-                        const normalized = normalizeProtocolText(protocol);
-                        buildPlanForm.setValue("protocol", normalized, { shouldDirty: true, shouldValidate: true });
-                        buildPlanForm.setValue("source_ref", `workspace://${normalized}/source/`, { shouldDirty: true, shouldValidate: true });
+                      onValueChange={(value) => {
+                        buildPlanForm.clearErrors("protocol");
+                        buildPlanForm.setValue("protocol", value, { shouldDirty: true, shouldValidate: true });
+                      }}
+                      onCommit={async (value) => {
+                        buildPlanForm.clearErrors("protocol");
+                        buildPlanForm.setValue("protocol", value, { shouldDirty: true, shouldValidate: true });
                         await Promise.all([
+                          protocolsQuery.refetch(),
                           buildProbeQuery.refetch(),
                           buildPlansQuery.refetch(),
                           buildRunsQuery.refetch(),
@@ -2357,9 +2295,7 @@ export function OfflineStudioView(): JSX.Element {
                       }}
                     />
                   </FormField>
-                  <FormField label="source_ref">
-                    <Input {...buildPlanForm.register("source_ref")} placeholder="workspace://modbus/source/" />
-                  </FormField>
+                  <FixedPathField label="source_ref" value={buildAssets?.buildSourceDisplay ?? "选择协议后自动生成"} description="固定引用协议源码目录 source/。" />
                   <div className="grid gap-4 md:grid-cols-2">
                     <FormField label="compiler">
                       <Input {...buildPlanForm.register("compiler")} placeholder="afl-clang-fast" />
@@ -2368,12 +2304,8 @@ export function OfflineStudioView(): JSX.Element {
                       <Input {...buildPlanForm.register("instrumentation_mode")} placeholder="llvm" />
                     </FormField>
                   </div>
-                  <FormField label="input_ref" description="用于预测 LaunchProfile。">
-                    <Input {...buildPlanForm.register("input_ref")} placeholder="workspace://modbus/seeds/bin/" />
-                  </FormField>
-                  <FormField label="dict_ref">
-                    <Input {...buildPlanForm.register("dict_ref")} placeholder="workspace://modbus/dicts/auto.dict" />
-                  </FormField>
+                  <FixedPathField label="input_ref" description="固定引用种子目录 seeds/bin/。" value={buildAssets?.buildInputDisplay ?? "选择协议后自动生成"} />
+                  <FixedPathField label="dict_ref" description="固定引用协议字典 dicts/auto.dict。" value={buildAssets?.dictDisplay ?? "选择协议后自动生成"} />
                   <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/45 px-4 py-3">
                     <div>
                       <p className="text-sm font-medium">LLM 辅助</p>
@@ -2382,17 +2314,17 @@ export function OfflineStudioView(): JSX.Element {
                     <Switch checked={buildPlanForm.watch("use_llm")} onCheckedChange={(checked) => buildPlanForm.setValue("use_llm", checked)} />
                   </div>
                   <div className="flex flex-wrap gap-3">
-                    <Button type="submit" disabled={buildPlanMutation.isPending}>
+                    <Button type="submit" disabled={buildPlanMutation.isPending || !buildAssets}>
                       <Wand2 className="size-4" />
                       生成 BuildPlan
                     </Button>
                     <Button
                       type="button"
                       variant="secondary"
-                      disabled={!buildPlansQuery.data?.[0]?.plan_id || buildRunMutation.isPending}
+                      disabled={!buildPlansQuery.data?.[0]?.plan_id || buildRunMutation.isPending || !buildProtocol}
                       onClick={() => {
                         const latest = buildPlansQuery.data?.[0];
-                        if (!latest) return;
+                        if (!latest || !buildProtocol) return;
                         buildRunMutation.mutate({ protocol: buildProtocol, planId: latest.plan_id });
                       }}
                     >
@@ -2457,13 +2389,14 @@ export function OfflineStudioView(): JSX.Element {
                               type="button"
                               size="sm"
                               variant="outline"
+                              disabled={!buildProtocol || !buildAssets}
                               onClick={() =>
                                 launchProfileMutation.mutate({
                                   protocol: buildProtocol,
                                   target_id: target.target_id,
                                   build_id: buildRunsQuery.data?.[0]?.build_id,
-                                  input_ref: buildPlanForm.getValues("input_ref") || undefined,
-                                  dict_ref: buildPlanForm.getValues("dict_ref") || undefined,
+                                  input_ref: buildAssets?.buildInputRef || undefined,
+                                  dict_ref: buildAssets?.dictRef || undefined,
                                 })
                               }
                             >

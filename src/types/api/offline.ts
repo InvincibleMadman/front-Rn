@@ -5,7 +5,7 @@ export interface WithOperationId {
 
 export interface ProtocolAnalyzeRequest extends WithOperationId {
   protocol: string;
-  source_path: string;
+  source_path?: string | null;
   source_ref?: string | null;
   output_path?: string | null;
   output_ref?: string | null;
@@ -93,7 +93,7 @@ export type RiskChunkStrategy = "function" | "file" | "hybrid" | string;
 
 export interface RiskAnalyzeRequest extends WithOperationId {
   protocol: string;
-  source_path: string;
+  source_path?: string | null;
   source_ref?: string | null;
   output_path?: string | null;
   output_ref?: string | null;
