@@ -61,7 +61,7 @@ export function ArtifactsView(): JSX.Element {
             <Search className="size-4 text-[hsl(var(--accent-blue))]" />
             跨协议产物搜索
           </CardTitle>
-          <CardDescription>产物中心只负责跨协议证据检索，不承担源码导入和虚拟文件树管理。</CardDescription>
+          <CardDescription>产物中心负责整个虚拟文件树的资源检索</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-4">
           <Input
@@ -103,7 +103,7 @@ export function ArtifactsView(): JSX.Element {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle>产物列表</CardTitle>
-            <CardDescription>展示节点、协议、scope、kind、name、virtual_path、workspace_ref、size、updated_at 与操作入口。</CardDescription>
+            <CardDescription>属性：节点、协议、scope、kind、name、virtual_path、workspace_ref、size、updated_at 与操作入口</CardDescription>
           </CardHeader>
           <CardContent>
             {(artifactsQuery.data?.length ?? 0) === 0 ? (
@@ -183,7 +183,7 @@ export function ArtifactsView(): JSX.Element {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle>产物预览</CardTitle>
-            <CardDescription>继续使用现有 workspace 预览能力，不暴露真实服务器路径。</CardDescription>
+            <CardDescription>Workspace 内的文件头部预览</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="rounded-[var(--radius-lg)] border border-border/50 bg-background/60 px-3 py-2 text-xs text-muted-foreground">

@@ -214,7 +214,7 @@ export function DebugLaunchPanel({
 
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="mb-4 flex items-start justify-between gap-3">
-          <SectionTitle title="启动表单" desc="保留工程参数视图，并补上协议专用 replay 脚本能力。" />
+          <SectionTitle title="启动表单" desc="工程参数视图，完整的智能体 GDB 会话启动项配置" />
           <Button type="button" onClick={onSubmit} disabled={submitting} className="rounded-lg">
             <Play className="h-4 w-4" />
             发起调试
