@@ -14,7 +14,7 @@ import { systemApi } from "@/lib/api/services/system";
 import { usersApi } from "@/lib/api/services/users";
 import { useAuthStore } from "@/stores/auth-store";
 import { useUiStore } from "@/stores/ui-store";
-import type { AppConfigResponse, SystemCapabilitiesResponse, SystemInfoResponse } from "@/types/api/config";
+import type { AppConfigResponse, SystemCapabilitiesResponse, SystemInfoResponse, ToolchainItemSummary } from "@/types/api/config";
 import type { SettingsCapabilityItem } from "@/features/settings/settings-capability-grid";
 import {
   SettingsHeroBoard,
@@ -22,7 +22,7 @@ import {
   type SettingsHeroSignalPanel,
 } from "@/features/settings/settings-hero-board";
 import type { SettingsSecurityCheck } from "@/features/settings/settings-security-posture";
-import { accountSchema, buildPatch, configToForm, CONFIG_TABS, createUserSchema, formatSeconds, isSettingsTab, safeText, settingsSchema, yesNo, type AccountFormValues, type CreateUserFormValues, type NormalizedAuthSecuritySummary, type SettingsFormValues, type SettingsTab, type SettingsTabMeta } from "@/features/settings/settings-shared";
+import { accountSchema, buildPatch, configToForm, CONFIG_TABS, countAvailableTools, createUserSchema, formatSeconds, isSettingsTab, safeText, settingsSchema, toolchainSummaryTone, toolchainSummaryValue, yesNo, type AccountFormValues, type CreateUserFormValues, type NormalizedAuthSecuritySummary, type SettingsFormValues, type SettingsTab, type SettingsTabMeta } from "@/features/settings/settings-shared";
 import { SettingsAccountSection } from "@/features/settings/settings-account-section";
 import { SettingsBackendSection } from "@/features/settings/settings-backend-section";
 import { SettingsBuildSection } from "@/features/settings/settings-build-section";
@@ -222,13 +222,13 @@ export function SettingsView(): JSX.Element {
   const capabilities = capabilitiesQuery.data;
   const controlPlane = systemInfo?.control_plane ?? configQuery.data?.control_plane;
   const runtimeSecurity = configQuery.data?.runtime_info?.security ?? systemInfo?.runtime_info?.security;
-  const resolvedTools = useMemo(
-    () => configQuery.data?.runtime_info?.resolved_afl_tools ?? systemInfo?.afl?.resolved_tools ?? {},
-    [configQuery.data?.runtime_info?.resolved_afl_tools, systemInfo?.afl?.resolved_tools],
+  const toolchainSummary = useMemo<Record<string, ToolchainItemSummary>>(
+    () => configQuery.data?.runtime_info?.toolchain_summary ?? systemInfo?.runtime_info?.toolchain_summary ?? {},
+    [configQuery.data?.runtime_info?.toolchain_summary, systemInfo?.runtime_info?.toolchain_summary],
   );
-  const resolvedToolEntries = useMemo(
-    () => Object.entries(resolvedTools).sort(([left], [right]) => left.localeCompare(right)),
-    [resolvedTools],
+  const toolchainEntries = useMemo(
+    () => Object.entries(toolchainSummary).sort(([left], [right]) => left.localeCompare(right)),
+    [toolchainSummary],
   );
 
   const managedUsers = usersQuery.data ?? [];
@@ -276,7 +276,7 @@ export function SettingsView(): JSX.Element {
         ? "success"
         : "default";
 
-  const configuredToolCount = resolvedToolEntries.filter(([, value]) => Boolean(value)).length;
+  const configuredToolCount = countAvailableTools(toolchainSummary);
   const offlineCapabilityCount = capabilities?.offline?.length ?? 0;
   const jobsCapabilityCount = capabilities?.jobs?.length ?? 0;
   const debugCapabilityCount = capabilities?.debug?.length ?? 0;
@@ -327,7 +327,7 @@ export function SettingsView(): JSX.Element {
   const llmConfiguredStatus: "ready" | "partial" | "unavailable" =
     llmProvider && llmModel ? "ready" : llmProvider || llmModel || llmBaseUrl ? "partial" : "unavailable";
   const toolchainReadiness: "ready" | "partial" | "unavailable" =
-    !resolvedToolEntries.length ? "unavailable" : configuredToolCount === resolvedToolEntries.length ? "ready" : "partial";
+    !toolchainEntries.length ? "unavailable" : configuredToolCount === toolchainEntries.length ? "ready" : "partial";
   const buildAssistantStatus: "ready" | "partial" | "unavailable" =
     buildEnabled ? (buildAllowLlmAssist ? "ready" : "partial") : "unavailable";
   const llmTone = llmConfiguredStatus === "ready" ? "success" : llmConfiguredStatus === "partial" ? "warning" : "default";
@@ -359,7 +359,7 @@ export function SettingsView(): JSX.Element {
       eyebrow: "Current node / control plane",
       title: selectedNode?.name ?? "未选择节点",
       value: currentNodeStatus,
-      description: "聚合当前节点的控制面接口与功能链路状态视图",
+      description: "聚合当前节点的 control plane、node_id 与现代 `/api/v1/*` 链路状态。",
       tone: nodeTone,
       items: [
         { label: "node_id", value: safeText(controlPlane?.node_id, selectedNodeId || "未选择节点"), mono: true },
@@ -373,7 +373,7 @@ export function SettingsView(): JSX.Element {
       eyebrow: "Web BFF security",
       title: "Session + CSRF",
       value: hasSecurityInputs ? `${securityPostureScore}%` : "Unavailable",
-      description: "基于 BFF 和节点会话的各属性状态计算风险评估安全姿态",
+      description: "基于 BFF 会话、CSRF、登录节流与默认 secret 风险计算安全姿态。",
       tone: hasSecurityInputs ? securityTone : "default",
       items: [
         { label: "http_only", value: yesNo(securitySummary?.session?.http_only), tone: securitySummary?.session?.http_only ? "success" : "warning" },
@@ -396,7 +396,7 @@ export function SettingsView(): JSX.Element {
       eyebrow: "LLM / build",
       title: llmProvider || "LLM not configured",
       value: buildEnabled ? "已启用" : "已关闭",
-      description: "Provider、Model、构建助手与 LLM 辅助等智能服务状态",
+      description: "聚合 provider、model、构建助手开关与 LLM 辅助状态。",
       tone: llmTone,
       items: [
         { label: "model", value: llmModel || "未配置" },
@@ -408,15 +408,15 @@ export function SettingsView(): JSX.Element {
     {
       id: "toolchain",
       eyebrow: "Toolchain readiness",
-      title: `${configuredToolCount} / ${resolvedToolEntries.length || 0}`,
+      title: `${configuredToolCount} / ${toolchainEntries.length || 0}`,
       value: statusLabel(toolchainReadiness),
       description: "根据已解析工具数量判断 AFL 与构建工具链是否就绪。",
       tone: toolchainTone,
       items: [
-        { label: "afl_fuzz", value: safeText(resolvedTools.afl_fuzz), mono: true, tone: resolvedTools.afl_fuzz ? "success" : "warning" },
-        { label: "afl_showmap", value: safeText(resolvedTools.afl_showmap), mono: true, tone: resolvedTools.afl_showmap ? "success" : "warning" },
-        { label: "cmake", value: safeText(resolvedTools.cmake), mono: true, tone: resolvedTools.cmake ? "success" : "warning" },
-        { label: "gdb", value: debuggerGdbPath || "gdb", mono: true },
+        { label: "afl_fuzz", value: toolchainSummaryValue(toolchainSummary.afl_fuzz), tone: toolchainSummaryTone(toolchainSummary.afl_fuzz) },
+        { label: "afl_showmap", value: toolchainSummaryValue(toolchainSummary.afl_showmap), tone: toolchainSummaryTone(toolchainSummary.afl_showmap) },
+        { label: "cmake", value: toolchainSummaryValue(toolchainSummary.cmake), tone: toolchainSummaryTone(toolchainSummary.cmake) },
+        { label: "gdb", value: toolchainSummaryValue(toolchainSummary.gdb), tone: toolchainSummaryTone(toolchainSummary.gdb) },
       ],
     },
   ], [
@@ -427,17 +427,17 @@ export function SettingsView(): JSX.Element {
     controlPlane?.node_id,
     controlPlane?.token_expire_seconds,
     currentNodeStatus,
-    debuggerGdbPath,
     llmBaseUrl,
     llmModel,
     llmProvider,
     hasSecurityInputs,
     llmTone,
     nodeTone,
-    resolvedToolEntries.length,
-    resolvedTools.afl_fuzz,
-    resolvedTools.afl_showmap,
-    resolvedTools.cmake,
+    toolchainEntries.length,
+    toolchainSummary.afl_fuzz,
+    toolchainSummary.afl_showmap,
+    toolchainSummary.cmake,
+    toolchainSummary.gdb,
     securityPostureScore,
     securitySummary?.csrf?.enabled,
     securitySummary?.default_node?.using_default_secret,
@@ -493,7 +493,7 @@ export function SettingsView(): JSX.Element {
     {
       id: "toolchain-resolved",
       label: "toolchain resolved",
-      description: `${configuredToolCount} / ${resolvedToolEntries.length || 0} tools resolved`,
+      description: `${configuredToolCount} / ${toolchainEntries.length || 0} tools resolved`,
       status: toolchainReadiness,
     },
   ], [
@@ -507,7 +507,7 @@ export function SettingsView(): JSX.Element {
     llmModel,
     llmProvider,
     offlineCapabilityCount,
-    resolvedToolEntries.length,
+    toolchainEntries.length,
     systemInfo?.api_contract,
     toolchainReadiness,
   ]);
@@ -523,11 +523,11 @@ export function SettingsView(): JSX.Element {
         badge:
           item.id === "security" && hasDefaultSecretRisk
             ? { tone: "warning" as const, label: "默认 secret 风险" }
-            : item.id === "toolchain" && resolvedToolEntries.length > configuredToolCount
+            : item.id === "toolchain" && toolchainEntries.length > configuredToolCount
               ? { tone: "partial" as const, label: "工具链未完全就绪" }
               : undefined,
       })),
-    [configuredToolCount, hasDefaultSecretRisk, isAdmin, resolvedToolEntries.length],
+    [configuredToolCount, hasDefaultSecretRisk, isAdmin, toolchainEntries.length],
   );
 
   const refreshSettingsView = async (): Promise<void> => {
@@ -626,7 +626,7 @@ export function SettingsView(): JSX.Element {
             buildEnabled={buildEnabled}
             buildAllowLlmAssist={buildAllowLlmAssist}
             configuredToolCount={configuredToolCount}
-            resolvedToolCount={resolvedToolEntries.length}
+            resolvedToolCount={toolchainEntries.length}
             offlineCapabilityCount={offlineCapabilityCount}
             jobsCapabilityCount={jobsCapabilityCount}
             debugCapabilityCount={debugCapabilityCount}
@@ -691,9 +691,8 @@ export function SettingsView(): JSX.Element {
             selectedNode={selectedNode}
             pending={patchMutation.isPending}
             submitMessage={submitMessage}
-            resolvedTools={resolvedTools}
-            resolvedToolEntries={resolvedToolEntries}
-            configuredToolCount={configuredToolCount}
+            toolchainSummary={toolchainSummary}
+            toolchainEntries={toolchainEntries}
           />
         ) : null}
 
@@ -707,6 +706,7 @@ export function SettingsView(): JSX.Element {
             selectedNode={selectedNode}
             pending={patchMutation.isPending}
             submitMessage={submitMessage}
+            gdbSummary={toolchainSummary.gdb}
           />
         ) : null}
 
@@ -759,7 +759,7 @@ export function SettingsView(): JSX.Element {
           <summary className="settings-json-foldout__summary">
             <div>
               <CardTitle>当前配置 JSON / 调试信息</CardTitle>
-              <CardDescription className="mt-1">测试人员辅助底部折叠区，用于对照节点配置、system info、capabilities 与 BFF 安全摘要原始返回字段</CardDescription>
+              <CardDescription className="mt-1">保留底部折叠区，用于对照节点配置、system info、capabilities 与 BFF 安全摘要原始返回。</CardDescription>
             </div>
             <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1 text-xs text-muted-foreground transition-colors group-open:bg-primary/10 group-open:text-primary">
               <span className="group-open:hidden">展开</span>

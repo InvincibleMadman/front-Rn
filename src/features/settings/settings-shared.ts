@@ -1,7 +1,7 @@
 import type { BaseSyntheticEvent, ComponentType } from "react";
 import { z } from "zod";
 import type { AuthSecuritySummary } from "@/types/api/auth";
-import type { AppConfigResponse, ConfigPatchRequest } from "@/types/api/config";
+import type { AppConfigResponse, ConfigPatchRequest, ToolchainItemSummary } from "@/types/api/config";
 
 export const settingsSchema = z.object({
   workspace_root: z.string().optional(),
@@ -222,4 +222,26 @@ export function buildPatch(values: SettingsFormValues): ConfigPatchRequest {
       allow_shell_scripts: values.build_allow_shell_scripts,
     },
   };
+}
+
+export function toolchainSummaryValue(item?: ToolchainItemSummary): string {
+  if (item?.status === "available") return "有效";
+  if (item?.status === "missing") return "无效";
+  return "未配置";
+}
+
+export function toolchainSummaryTone(item?: ToolchainItemSummary): Tone {
+  if (item?.status === "available") return "success";
+  if (item?.status === "missing") return "warning";
+  return "default";
+}
+
+export function toolchainResolutionLabel(item?: ToolchainItemSummary): string {
+  if (item?.resolution === "configured_path") return "显式配置";
+  if (item?.resolution === "path_lookup") return "PATH 解析";
+  return "未配置";
+}
+
+export function countAvailableTools(summary: Record<string, ToolchainItemSummary>): number {
+  return Object.values(summary).filter((item) => item?.status === "available").length;
 }

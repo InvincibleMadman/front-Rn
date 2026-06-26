@@ -8,8 +8,9 @@ import { SettingsInfoGroup } from "@/features/settings/components/settings-info-
 import { SettingsInfoRow } from "@/features/settings/components/settings-info-row";
 import { SettingsValueChip } from "@/features/settings/components/settings-value-chip";
 import { ConfigSubmitBar, MissingNodeNotice, SectionUnavailableNotice } from "@/features/settings/settings-section-support";
-import { safeText, splitLines, type SettingsFormValues, type SettingsSubmitHandler } from "@/features/settings/settings-shared";
+import { safeText, splitLines, toolchainSummaryTone, toolchainSummaryValue, type SettingsFormValues, type SettingsSubmitHandler } from "@/features/settings/settings-shared";
 import type { ApiNode } from "@/types/api/nodes";
+import type { ToolchainItemSummary } from "@/types/api/config";
 
 export function SettingsBuildSection({
   form,
@@ -20,6 +21,7 @@ export function SettingsBuildSection({
   selectedNode,
   pending,
   submitMessage,
+  gdbSummary,
 }: {
   form: UseFormReturn<SettingsFormValues>;
   submitConfig: SettingsSubmitHandler;
@@ -29,6 +31,7 @@ export function SettingsBuildSection({
   selectedNode: ApiNode | null;
   pending: boolean;
   submitMessage: string | null;
+  gdbSummary?: ToolchainItemSummary;
 }): JSX.Element {
   const allowedCompilersCount = splitLines(form.watch("build_allowed_compilers_text")).length;
   const allowedToolsCount = splitLines(form.watch("build_allowed_tools_text")).length;
@@ -80,7 +83,7 @@ export function SettingsBuildSection({
           <SettingsEditRow
             label="GDB path"
             control={<Input {...form.register("debugger_gdb_path")} />}
-            status={<SettingsValueChip tone="info" mono>{safeText(form.watch("debugger_gdb_path"))}</SettingsValueChip>}
+            status={<SettingsValueChip tone={toolchainSummaryTone(gdbSummary)}>{toolchainSummaryValue(gdbSummary)}</SettingsValueChip>}
           />
           <SettingsEditRow
             label="Debugger timeout"

@@ -76,6 +76,12 @@ export interface ControlPlaneSecuritySummary {
   using_default_secret?: boolean;
 }
 
+export interface ToolchainItemSummary {
+  status?: "available" | "missing" | "unconfigured";
+  resolution?: "configured_path" | "path_lookup" | "none";
+  configured?: boolean;
+}
+
 export interface RuntimeSecurityInfo {
   control_plane_enabled?: boolean;
   using_default_secret?: boolean;
@@ -84,6 +90,7 @@ export interface RuntimeSecurityInfo {
 
 export interface RuntimeInfo {
   resolved_afl_tools?: Record<string, string | null>;
+  toolchain_summary?: Record<string, ToolchainItemSummary>;
   security?: RuntimeSecurityInfo;
 }
 
