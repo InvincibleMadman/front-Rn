@@ -23,8 +23,8 @@ export function DebugMetaBoard({ items }: { items: DebugMetaItem[] }): JSX.Eleme
               <Icon className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{item.label}</div>
-              <div className="truncate text-[12px] text-foreground" title={item.value}>
+              <div className="text-[12px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{item.label}</div>
+              <div className="truncate text-[13px] text-foreground" title={item.value}>
                 {item.value}
               </div>
             </div>

@@ -1499,37 +1499,6 @@ export function DashboardView(): JSX.Element {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Workflow className="size-4 text-[hsl(var(--accent-blue))]" />
-            仪表盘日志
-          </CardTitle>
-          <CardDescription>
-            页面级数据加载与降级渲染记录。错误不再嵌入卡片区域显示。
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="max-h-44 overflow-y-auto rounded-xl border border-border/60 bg-background/72 p-3 font-mono text-xs">
-            {dashboardLogs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Dashboard ready. Waiting for BFF overview data.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {dashboardLogs.map((item, index) => (
-                  <p
-                    key={`${item}-${index}`}
-                    className="break-all text-[hsl(var(--text-secondary))]"
-                  >
-                    {item}
-                  </p>
-                ))}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

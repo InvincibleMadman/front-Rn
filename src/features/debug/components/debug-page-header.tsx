@@ -4,6 +4,10 @@ import { DebugMetaBoard, type DebugMetaItem } from "@/features/debug/components/
 import { DebugStageTimeline } from "@/features/debug/components/debug-stage-timeline";
 import type { MonitorViewModel } from "@/features/debug/debug-types";
 
+function display(value?: string | null, fallback = "暂无"): string {
+  return value && value.trim() ? value : fallback;
+}
+
 function HeaderStat({
   icon: Icon,
   label,
@@ -19,8 +23,8 @@ function HeaderStat({
         <Icon className="h-3.5 w-3.5" />
       </div>
       <div className="min-w-0">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
-        <div className="truncate text-[12px] text-foreground" title={value}>{value}</div>
+        <div className="text-[12px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
+        <div className="truncate text-[13px] text-foreground" title={value}>{value}</div>
       </div>
     </div>
   );
@@ -39,28 +43,28 @@ export function DebugPageHeader({
     {
       key: "protocol",
       label: "协议",
-      value: viewModel.header.protocol || "暂无",
+      value: display(viewModel.header.protocol),
       icon: Binary,
       tone: "text-sky-400 border-sky-500/25 bg-sky-500/10",
     },
     {
       key: "crashType",
       label: "异常类型",
-      value: viewModel.header.crashType || "待分析",
+      value: display(viewModel.header.crashType, "待分析"),
       icon: Bug,
       tone: "text-rose-400 border-rose-500/25 bg-rose-500/10",
     },
     {
       key: "focusFrame",
       label: "焦点栈帧",
-      value: viewModel.header.focusFrame || "暂无焦点栈帧",
+      value: display(viewModel.header.focusFrame, "暂无焦点栈帧"),
       icon: Crosshair,
       tone: "text-amber-400 border-amber-500/25 bg-amber-500/10",
     },
     {
       key: "relatedLibraryFile",
       label: "关联库",
-      value: viewModel.header.relatedLibraryFile || "暂无",
+      value: display(viewModel.header.relatedLibraryFile),
       icon: Link2,
       tone: "text-emerald-400 border-emerald-500/25 bg-emerald-500/10",
     },
@@ -68,9 +72,9 @@ export function DebugPageHeader({
 
   return (
     <div className="overflow-hidden rounded-[1.25rem] border border-border bg-card shadow-none">
-      <div className="grid gap-4 px-4 py-4 xl:grid-cols-[minmax(0,1fr)_minmax(40rem,46rem)] xl:items-end">
-        <div className="flex min-w-0 flex-col justify-end gap-4">
-          <div className="flex flex-wrap items-center gap-3">
+      <div className="grid gap-4 px-4 py-4 xl:grid-cols-[minmax(0,1fr)_minmax(40rem,46rem)]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex flex-wrap items-start gap-3 self-start">
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
               <ShieldAlert className="h-3.5 w-3.5" />
               智能调试
@@ -84,12 +88,12 @@ export function DebugPageHeader({
           </div>
         </div>
 
-        <div className="grid min-w-0 gap-2 self-end xl:self-stretch">
+        <div className="grid min-w-0 gap-2 self-start">
           <div className="grid gap-2 md:grid-cols-4">
-            <HeaderStat icon={ActivitySquare} label="状态" value={viewModel.header.status} />
-            <HeaderStat icon={Workflow} label="会话 / 操作" value={viewModel.header.sessionId || viewModel.header.operationId || "暂无"} />
-            <HeaderStat icon={ShieldAlert} label="最近更新" value={viewModel.header.updatedAt || "尚未刷新"} />
-            <HeaderStat icon={ShieldAlert} label="调试策略" value={viewModel.header.debuggerMode || "崩溃证据归纳"} />
+            <HeaderStat icon={ActivitySquare} label="状态" value={display(viewModel.header.status)} />
+            <HeaderStat icon={Workflow} label="会话 / 操作" value={display(viewModel.header.sessionId || viewModel.header.operationId)} />
+            <HeaderStat icon={ShieldAlert} label="最近更新" value={display(viewModel.header.updatedAt, "尚未刷新")} />
+            <HeaderStat icon={ShieldAlert} label="调试策略" value={display(viewModel.header.debuggerMode, "崩溃证据归纳")} />
           </div>
           <DebugMetaBoard items={items} />
         </div>

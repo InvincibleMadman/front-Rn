@@ -20,8 +20,8 @@ import type { DebugLaunchFormState } from "@/features/debug/debug-types";
 function SectionTitle({ title, desc }: { title: string; desc: string }): JSX.Element {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
-      <p className="mt-1 text-sm text-foreground">{desc}</p>
+      <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
+      <p className="mt-1 text-[15px] text-foreground">{desc}</p>
     </div>
   );
 }
