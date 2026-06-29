@@ -41,12 +41,12 @@ const STATUS_DESCRIPTIONS: Record<string, string> = {
 };
 
 const TIMELINE_SPECS = [
-  { key: "created", label: "已创建", description: "会话元数据已登记。" },
-  { key: "started", label: "已启动", description: "目标启动与样本回放已经开始。" },
-  { key: "captured", label: "已捕获", description: "已观察到异常信号或焦点栈帧。" },
+  { key: "created", label: "创建", description: "会话元数据已登记。" },
+  { key: "started", label: "启动", description: "目标启动与样本回放已经开始。" },
+  { key: "captured", label: "捕获", description: "已观察到异常信号或焦点栈帧。" },
   { key: "evidence", label: "证据完成", description: "运行时证据已可查看。" },
-  { key: "located", label: "已定位", description: "主要源码位置已经解析完成。" },
-  { key: "archived", label: "已归档", description: "最终结论已经归档。" },
+  { key: "located", label: "定位", description: "主要源码位置已经解析完成。" },
+  { key: "archived", label: "归档", description: "最终结论已经归档。" },
 ] as const;
 
 const KEY_REGISTER_NAMES = ["rip", "eip", "pc", "rsp", "esp", "rbp", "ebp", "sp", "lr"];

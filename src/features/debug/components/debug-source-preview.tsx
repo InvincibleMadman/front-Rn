@@ -16,14 +16,14 @@ export function DebugSourcePreview({
 }): JSX.Element {
   if (!excerpt?.lines?.length) {
     return (
-      <div className="rounded-md border border-dashed border-border bg-background px-4 py-8 text-[14px] text-muted-foreground">
+      <div className="rounded-lg border border-dashed border-border bg-background px-4 py-8 text-[14px] text-muted-foreground">
         {sourceAvailable ? "已定位到源码，但当前没有可展示的代码片段。" : "当前工作区暂时无法提供源码片段。"}
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-card/90">
+    <div className="overflow-hidden rounded-lg border border-border bg-card/90">
       <div className="border-b border-border px-4 py-3">
         <p className="text-[14px] font-semibold text-foreground">{functionName || "源码片段"}</p>
         <p className="mt-1 break-all font-mono text-[12px] text-muted-foreground">

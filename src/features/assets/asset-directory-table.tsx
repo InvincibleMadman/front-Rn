@@ -82,9 +82,9 @@ export function AssetDirectoryTable({
 
   return (
     <>
-      <div className="min-h-0 min-w-0 overflow-hidden rounded-[var(--radius-xl)] border border-border bg-card shadow-console">
+      <div className="min-h-0 min-w-0 rounded-[var(--radius-xl)] border border-border bg-card shadow-console">
         <div className="border-b border-border/70 px-4 py-3">
-          <div className="min-h-0 min-w-0 overflow-x-auto">
+          <div className="min-h-0 min-w-0 overflow-x-auto rounded-t-[inherit]">
             <div className="flex min-w-max items-center gap-1 text-sm text-muted-foreground">
               <span className="rounded-md bg-background px-2 py-1 font-medium text-foreground">{getAssetScopeLabel(scope)}</span>
               {breadcrumbs.map((segment, index) => (
@@ -146,9 +146,9 @@ export function AssetDirectoryTable({
         </div>
 
         {items.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-muted-foreground">当前目录暂无文件。</div>
+          <div className="overflow-hidden rounded-b-[inherit] px-4 py-10 text-center text-sm text-muted-foreground">当前目录暂无文件。</div>
         ) : (
-          <div className="min-h-0 min-w-0 divide-y divide-border/60">
+          <div className="min-h-0 min-w-0 overflow-hidden rounded-b-[inherit] divide-y divide-border/60">
             {items.map((item) => {
               const ItemIcon = getWorkspaceItemIcon(item);
               const selected = selectedItem?.virtual_path === item.virtual_path && selectedItem?.type === item.type;

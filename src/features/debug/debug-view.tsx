@@ -45,7 +45,7 @@ export function DebugView(): JSX.Element {
   const [selectedCandidatePath, setSelectedCandidatePath] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    document.title = "智能调试";
+    document.title = "ICP Fuzz";
     return () => {
       document.title = "ICP Fuzz";
     };
@@ -354,7 +354,7 @@ export function DebugView(): JSX.Element {
       <ApiErrorReporter error={sessionQuery.error} title="加载调试会话失败" source="debug" />
 
       <DebugPageHeader
-        title="智能调试"
+        title="智能体 GDB 调试"
         subtitle={monitorViewModel.header.statusDescription}
         viewModel={monitorViewModel}
       />

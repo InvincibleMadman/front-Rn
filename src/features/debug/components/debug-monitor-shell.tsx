@@ -16,12 +16,12 @@ export function DebugMonitorShell({
   return (
     <div className="grid gap-3 xl:grid-cols-[18rem_minmax(0,1.5fr)_23rem] 2xl:grid-cols-[19rem_minmax(0,1.6fr)_24rem] xl:items-start">
       <div className="grid min-h-full gap-3">
+        <DebugMonitorRuntime details={viewModel.details} variant="stack" />
         <DebugMonitorContext context={viewModel.context} workspaceRef={viewModel.source.workspaceRef} />
-        <DebugMonitorPlanFlow items={viewModel.planFlow} />
       </div>
 
       <div className="grid min-h-full gap-3 [grid-template-rows:auto_auto_auto]">
-        <DebugMonitorRuntime details={viewModel.details} variant="stack" />
+        <DebugMonitorPlanFlow items={viewModel.planFlow} />
         <DebugMonitorSource
           source={viewModel.source}
           previewExcerpt={previewExcerpt}

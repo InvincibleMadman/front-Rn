@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { MonitorDetailsViewModel } from "@/features/debug/debug-types";
 
 function EmptyState({ label }: { label: string }): JSX.Element {
-  return <div className="rounded border border-dashed border-border bg-background px-3 py-5 text-[14px] text-muted-foreground">{label}</div>;
+  return <div className="rounded-lg border border-dashed border-border bg-background px-3 py-5 text-[14px] text-muted-foreground">{label}</div>;
 }
 
 function Panel({ title, icon: Icon, children }: { title: string; icon: typeof LibraryBig; children: ReactNode }): JSX.Element {
@@ -24,18 +24,18 @@ export function DebugMonitorDetails({ details }: { details: MonitorDetailsViewMo
   return (
     <div className="grid gap-3 [grid-template-rows:auto_auto_auto_auto]">
       <Panel title="分析结论" icon={ScrollText}>
-        <div className="mb-3 rounded border border-border bg-background px-3 py-3 text-[14px] leading-7 text-foreground">
+        <div className="mb-3 rounded-lg border border-border bg-background px-3 py-3 text-[14px] leading-7 text-foreground">
           {details.stackText}
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {details.evidenceSummary.map((item) => (
-            <div key={item.label} className="rounded border border-border bg-background px-3 py-2.5">
+            <div key={item.label} className="rounded-lg border border-border bg-background px-3 py-2.5">
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{item.label}</div>
               <div className="mt-1 text-[13px] text-foreground">{item.value}</div>
             </div>
           ))}
         </div>
-        <div className="mt-3 rounded border border-border bg-background p-3">
+        <div className="mt-3 rounded-lg border border-border bg-background p-3">
           <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">结构化摘要</div>
           <div className="[&_*]:text-[13px] [&_*]:leading-6">
             <JsonViewer data={details.structured} />
@@ -45,7 +45,7 @@ export function DebugMonitorDetails({ details }: { details: MonitorDetailsViewMo
 
       <Panel title="运行时证据" icon={Radar}>
         <div className="grid gap-3 xl:grid-cols-2">
-          <div className="overflow-hidden rounded border border-border bg-background">
+          <div className="overflow-hidden rounded-lg border border-border bg-background">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -67,7 +67,7 @@ export function DebugMonitorDetails({ details }: { details: MonitorDetailsViewMo
               </TableBody>
             </Table>
           </div>
-          <div className="overflow-hidden rounded border border-border bg-background">
+          <div className="overflow-hidden rounded-lg border border-border bg-background">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -94,7 +94,7 @@ export function DebugMonitorDetails({ details }: { details: MonitorDetailsViewMo
 
       <Panel title="GDB 命令" icon={TerminalSquare}>
         {details.gdbAgentCommands.length ? (
-          <div className="overflow-hidden rounded border border-border bg-background">
+          <div className="overflow-hidden rounded-lg border border-border bg-background">
             {details.gdbAgentCommands.map((item, index) => (
               <div key={`${item.label}-${index}`} className="border-b border-border px-3 py-2.5 last:border-b-0">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{item.label || `步骤 ${index + 1}`}</div>
@@ -108,7 +108,7 @@ export function DebugMonitorDetails({ details }: { details: MonitorDetailsViewMo
 
       <Panel title="共享库" icon={LibraryBig}>
         {details.sharedLibraries.length ? (
-          <div className="overflow-hidden rounded border border-border bg-background">
+          <div className="overflow-hidden rounded-lg border border-border bg-background">
             <Table>
               <TableHeader>
                 <TableRow>

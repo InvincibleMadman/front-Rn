@@ -274,7 +274,7 @@ export function AssetFileTypeOverflowSelector({
                 {menuOpen ? (
                   <div
                     ref={menuRef}
-                    className="absolute left-0 top-full z-20 mt-2 w-[min(17.5rem,calc(100vw-2rem))] max-h-80 overflow-y-auto rounded-[var(--radius-lg)] border border-border bg-popover p-1.5 text-popover-foreground shadow-console"
+                    className="console-scrollbar absolute left-0 top-full z-[35] mt-2 w-[min(17.5rem,calc(100vw-2rem))] max-h-80 overflow-y-auto rounded-[var(--radius-lg)] border border-border bg-popover p-1.5 text-popover-foreground shadow-console"
                     role="menu"
                   >
                     {hiddenOptions.map((option) => {
