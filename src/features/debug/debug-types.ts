@@ -1,4 +1,5 @@
 import type {
+  DebugAgentCommandEntry,
   DebugAgentProgressItem,
   DebugCandidate,
   DebugFrame,
@@ -60,6 +61,14 @@ export interface MonitorContextViewModel {
   binaryPath: string;
   cwd: string;
   transportType: string;
+  replayMode: string;
+  analysisMode: string;
+  analysisStrategy: string;
+  evidenceMode: string;
+  gdbUsed: boolean;
+  gdbReason?: string;
+  replayTarget?: string;
+  replayStatus?: string;
   sessionId?: string;
   operationId?: string;
   sourceAvailable: boolean;
@@ -94,6 +103,7 @@ export interface MonitorOutputViewModel {
   targetOutputAvailable: boolean;
   targetOutputDisclaimer: string;
   streams?: DebugOutputStreams | null;
+  replaySummary?: string;
 }
 
 export interface MonitorDetailsViewModel {
@@ -106,6 +116,8 @@ export interface MonitorDetailsViewModel {
   stackText: string;
   focusSummary: string;
   keyRegisters: DebugRegister[];
+  gdbAgentCommands: Array<{ label?: string; command?: string; preview?: string }>;
+  evidenceSummary: Array<{ label: string; value: string }>;
 }
 
 export interface MonitorViewModel {
@@ -116,6 +128,7 @@ export interface MonitorViewModel {
     relatedLibraryFile: string;
     status: string;
     statusDescription: string;
+    debuggerMode: string;
     sessionId?: string;
     operationId?: string;
     updatedAt?: string;

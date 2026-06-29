@@ -4,10 +4,10 @@ import type { DebugSection } from "@/features/debug/debug-types";
 import { cn } from "@/lib/utils/cn";
 
 const NAV_ITEMS: Array<{ key: DebugSection; label: string; icon: typeof PlayCircle; desc: string }> = [
-  { key: "launch", label: "启动", icon: PlayCircle, desc: "参数 / 候选 / 回填" },
-  { key: "monitor", label: "监控", icon: Radar, desc: "实时检查器 / 控制台" },
-  { key: "history", label: "记录", icon: History, desc: "历史会话 / 快速重跑" },
-  { key: "archive", label: "归档", icon: Archive, desc: "漏洞记录 / 报告挂接" },
+  { key: "launch", label: "发起调试", icon: PlayCircle, desc: "参数填写 / 回放 / 回填" },
+  { key: "monitor", label: "调试监控", icon: Radar, desc: "运行证据 / 实时视图" },
+  { key: "history", label: "历史会话", icon: History, desc: "历史记录 / 重新载入" },
+  { key: "archive", label: "归档记录", icon: Archive, desc: "问题记录 / 重新回填" },
 ];
 
 export function DebugSubnav({

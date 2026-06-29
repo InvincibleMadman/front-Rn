@@ -93,7 +93,7 @@ export function VulnHistoryView(): JSX.Element {
       <PageHeroBoard
           eyebrow="V U L N E R A B I L I T Y · O P S"
           title="漏洞中心"
-          description="成功经智能体 GDB 调试定位归档的漏洞详情检索访问，支持查看证据和类型等元数据，统计汇总相关数据制表"
+          description="成功经智能调试定位归档的漏洞详情检索访问，支持查看证据和类型等元数据，并对相关数据进行统计汇总。"
           board={<VulnStatusBoard summary={summary} />}
       />
 
@@ -170,7 +170,7 @@ export function VulnHistoryView(): JSX.Element {
                 {!closureRows.length ? <div className="rounded-[var(--radius-lg)] border border-dashed border-border/70 bg-card px-4 py-8 text-center text-sm text-muted-foreground">当前没有闭环状态统计。</div> : null}
                 <div className="rounded-[var(--radius-lg)] border border-border/60 bg-card p-3 text-xs text-muted-foreground">
                   <div className="flex items-center gap-2 text-foreground"><Link2 className="size-4" /> 关联摘要</div>
-                  <p className="mt-2">GDB：{summary?.linked_debug ?? 0} · Crash：{summary?.linked_crash ?? 0} · 未关联：{summary?.unlinked_records ?? 0}</p>
+                  <p className="mt-2">GDB：{summary?.linked_debug ?? 0} · 崩溃样本：{summary?.linked_crash ?? 0} · 未关联：{summary?.unlinked_records ?? 0}</p>
                 </div>
               </CardContent>
             </Card>

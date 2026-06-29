@@ -38,29 +38,29 @@ export function DebugPageHeader({
   const items: DebugMetaItem[] = [
     {
       key: "protocol",
-      label: "当前协议",
-      value: viewModel.header.protocol || "未选择",
+      label: "协议",
+      value: viewModel.header.protocol || "暂无",
       icon: Binary,
       tone: "text-sky-400 border-sky-500/25 bg-sky-500/10",
     },
     {
       key: "crashType",
-      label: "Crash 类型",
-      value: viewModel.header.crashType || "待识别",
+      label: "异常类型",
+      value: viewModel.header.crashType || "待分析",
       icon: Bug,
       tone: "text-rose-400 border-rose-500/25 bg-rose-500/10",
     },
     {
       key: "focusFrame",
-      label: "聚焦 Frame",
-      value: viewModel.header.focusFrame || "未定位",
+      label: "焦点栈帧",
+      value: viewModel.header.focusFrame || "暂无焦点栈帧",
       icon: Crosshair,
       tone: "text-amber-400 border-amber-500/25 bg-amber-500/10",
     },
     {
       key: "relatedLibraryFile",
-      label: "相关库文件",
-      value: viewModel.header.relatedLibraryFile || "未解析",
+      label: "关联库",
+      value: viewModel.header.relatedLibraryFile || "暂无",
       icon: Link2,
       tone: "text-emerald-400 border-emerald-500/25 bg-emerald-500/10",
     },
@@ -73,7 +73,7 @@ export function DebugPageHeader({
           <div className="flex flex-wrap items-center gap-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
               <ShieldAlert className="h-3.5 w-3.5" />
-              GDB 调试
+              智能调试
             </div>
             <StatusBadge status={viewModel.header.status} />
           </div>
@@ -85,10 +85,11 @@ export function DebugPageHeader({
         </div>
 
         <div className="grid min-w-0 gap-2 self-end xl:self-stretch">
-          <div className="grid gap-2 md:grid-cols-3">
+          <div className="grid gap-2 md:grid-cols-4">
             <HeaderStat icon={ActivitySquare} label="状态" value={viewModel.header.status} />
-            <HeaderStat icon={Workflow} label="会话 / 操作" value={viewModel.header.sessionId || viewModel.header.operationId || "未创建"} />
+            <HeaderStat icon={Workflow} label="会话 / 操作" value={viewModel.header.sessionId || viewModel.header.operationId || "暂无"} />
             <HeaderStat icon={ShieldAlert} label="最近更新" value={viewModel.header.updatedAt || "尚未刷新"} />
+            <HeaderStat icon={ShieldAlert} label="调试策略" value={viewModel.header.debuggerMode || "崩溃证据归纳"} />
           </div>
           <DebugMetaBoard items={items} />
         </div>
@@ -97,7 +98,7 @@ export function DebugPageHeader({
       <div className="border-t border-border px-3 py-3">
         <div className="mb-2 flex items-center justify-between gap-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">调试阶段</p>
-          <p className="text-[10px] text-muted-foreground">Debugger State Flow</p>
+          <p className="text-[10px] text-muted-foreground">状态流转</p>
         </div>
         <DebugStageTimeline items={viewModel.timeline} />
       </div>

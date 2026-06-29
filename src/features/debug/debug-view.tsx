@@ -44,6 +44,13 @@ export function DebugView(): JSX.Element {
   const [archiveCoarseType, setArchiveCoarseType] = useState("");
   const [selectedCandidatePath, setSelectedCandidatePath] = useState<string | undefined>(undefined);
 
+  useEffect(() => {
+    document.title = "智能调试";
+    return () => {
+      document.title = "ICP Fuzz";
+    };
+  }, []);
+
   const protocolsQuery = useQuery({
     queryKey: ["protocols"],
     queryFn: protocolsApi.listProtocols,
@@ -72,8 +79,6 @@ export function DebugView(): JSX.Element {
     () => (candidatesQuery.data ?? []).filter((item) => !ui.protocol || item.protocol === ui.protocol || (candidateToRequest(item)?.protocol ?? "") === ui.protocol),
     [candidatesQuery.data, ui.protocol],
   );
-
-
 
   const buildTargetsQuery = useQuery({
     queryKey: ["build-targets", ui.protocol],
@@ -179,7 +184,7 @@ export function DebugView(): JSX.Element {
     {
       operationId: currentLive?.operation_id ?? currentSession?.operation_id,
       source: "debug",
-      label: currentSession?.session_id ? `GDB ${currentSession.session_id}` : "GDB",
+      label: currentSession?.session_id ? `智能调试 ${currentSession.session_id}` : "智能调试",
       enabled: ui.section === "monitor" && Boolean(activeSessionId),
       kinds: ["event"],
     },
@@ -249,8 +254,6 @@ export function DebugView(): JSX.Element {
       }));
   }, [archiveCoarseType, archiveKeyword, archiveQuery.data, historyQuery.data]);
 
-
-
   function fillFromRequest(request?: ReturnType<typeof sessionRequest>) {
     setUi((current) => ({
       ...current,
@@ -307,11 +310,7 @@ export function DebugView(): JSX.Element {
     if (!activeSessionId) {
       return buildIdleMonitorViewModel(ui.protocol);
     }
-    return buildMonitorViewModel(
-      currentSession,
-      currentLive,
-      normalizedLogTailItems,
-    );
+    return buildMonitorViewModel(currentSession, currentLive, normalizedLogTailItems);
   }, [activeSessionId, currentLive, currentSession, normalizedLogTailItems, ui.protocol]);
 
   const previewExcerpt = useMemo(() => {
@@ -346,16 +345,16 @@ export function DebugView(): JSX.Element {
 
   return (
     <div className="space-y-4 pb-8">
-      <ApiErrorReporter error={protocolsQuery.error} title="协议列表获取失败" source="debug" />
-      <ApiErrorReporter error={candidatesQuery.error} title="调试候选获取失败" source="debug" />
-      <ApiErrorReporter error={createMutation.error} title="调试会话创建失败" source="debug" />
-      <ApiErrorReporter error={replayScriptsQuery.error} title="Replay 脚本列表读取失败" source="debug" />
-      <ApiErrorReporter error={uploadReplayScriptMutation.error} title="Replay 脚本上传失败" source="debug" />
-      <ApiErrorReporter error={deleteReplayScriptMutation.error} title="Replay 脚本删除失败" source="debug" />
-      <ApiErrorReporter error={sessionQuery.error} title="调试会话读取失败" source="debug" />
+      <ApiErrorReporter error={protocolsQuery.error} title="加载协议列表失败" source="debug" />
+      <ApiErrorReporter error={candidatesQuery.error} title="加载调试候选项失败" source="debug" />
+      <ApiErrorReporter error={createMutation.error} title="创建调试会话失败" source="debug" />
+      <ApiErrorReporter error={replayScriptsQuery.error} title="加载回放脚本失败" source="debug" />
+      <ApiErrorReporter error={uploadReplayScriptMutation.error} title="上传回放脚本失败" source="debug" />
+      <ApiErrorReporter error={deleteReplayScriptMutation.error} title="删除回放脚本失败" source="debug" />
+      <ApiErrorReporter error={sessionQuery.error} title="加载调试会话失败" source="debug" />
 
       <DebugPageHeader
-        title="GDB 调试分析舱"
+        title="智能调试"
         subtitle={monitorViewModel.header.statusDescription}
         viewModel={monitorViewModel}
       />
@@ -363,8 +362,8 @@ export function DebugView(): JSX.Element {
       <DebugSubnav value={ui.section} onChange={(section) => setUi((current) => ({ ...current, section }))} />
 
       {validationError ? <ApiErrorAlert error={new Error(validationError)} title="表单校验失败" compact /> : null}
-      {createMutation.error ? <ApiErrorAlert error={createMutation.error} title="调试会话创建失败" compact onRetry={submit} /> : null}
-      {sessionQuery.error ? <ApiErrorAlert error={sessionQuery.error} title="调试会话读取失败" compact onRetry={() => void sessionQuery.refetch()} /> : null}
+      {createMutation.error ? <ApiErrorAlert error={createMutation.error} title="创建调试会话失败" compact onRetry={submit} /> : null}
+      {sessionQuery.error ? <ApiErrorAlert error={sessionQuery.error} title="加载调试会话失败" compact onRetry={() => void sessionQuery.refetch()} /> : null}
 
       {ui.section === "launch" ? (
         <DebugLaunchPanel

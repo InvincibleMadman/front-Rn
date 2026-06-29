@@ -7,7 +7,7 @@ function Row({ label, value }: { label: string; value?: string }): JSX.Element {
   return (
     <div className="grid grid-cols-[4.8rem_minmax(0,1fr)] gap-3 border-b border-border px-3 py-2 last:border-b-0">
       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
-      <div className="min-w-0 break-all font-mono text-[13px] leading-6 text-foreground">{value || "—"}</div>
+      <div className="min-w-0 break-all font-mono text-[13px] leading-6 text-foreground">{value || "暂无"}</div>
     </div>
   );
 }
@@ -28,19 +28,19 @@ export function DebugMonitorSource({
   return (
     <div className="rounded-md border border-border bg-card p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
-        <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">源码定位 / Focus Frame</p>
+        <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">源码定位</p>
         <div className="flex flex-wrap gap-2">
           <Badge variant={source.sourceAvailable ? "success" : "outline"} className="rounded-sm px-1.5 py-0 text-[11px]">
-            {source.sourceAvailable ? "source ready" : "source missing"}
+            {source.sourceAvailable ? "源码就绪" : "源码缺失"}
           </Badge>
-          {source.workspaceRef ? <Badge variant="outline" className="rounded-sm px-1.5 py-0 text-[11px]">workspace ref</Badge> : null}
+          {source.workspaceRef ? <Badge variant="outline" className="rounded-sm px-1.5 py-0 text-[11px]">工作区引用</Badge> : null}
         </div>
       </div>
 
       <div className="mb-3 overflow-hidden rounded border border-border bg-background">
         <Row label="函数" value={source.functionName} />
         <Row label="文件" value={source.filePath ? `${source.filePath}${typeof source.line === "number" ? `:${source.line}` : ""}` : undefined} />
-        <Row label="Frame" value={focusFrame ? `#${focusFrame.index ?? 0}` : undefined} />
+        <Row label="栈帧" value={focusFrame ? `#${focusFrame.index ?? 0}` : undefined} />
         <Row label="摘要" value={focusSummary} />
       </div>
 

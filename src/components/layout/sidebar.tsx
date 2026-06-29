@@ -27,7 +27,7 @@ const navigation = [
   { to: "/assets", label: "资产中心", icon: FolderTree },
   { to: "/jobs", label: "Fuzz 任务", icon: ActivitySquare },
   { to: "/vulns/history", label: "漏洞中心", icon: History },
-  { to: "/debug", label: "GDB 调试", icon: Bug },
+  { to: "/debug", label: "智能调试", icon: Bug },
   { to: "/artifacts", label: "产物中心", icon: Binary },
   { to: "/reports", label: "报告中心", icon: FileText },
   { to: "/nodes", label: "节点管理", icon: Network },

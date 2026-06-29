@@ -81,8 +81,8 @@ const HOME_ENTRY_LINKS = [
   },
   {
     to: "/debug",
-    title: "GDB 调试",
-    description: "从 crash seed 进入证据链和函数定位视图。",
+    title: "智能调试",
+    description: "从 crash seed 进入证据链、函数定位与调试监控视图。",
     icon: Bug,
   },
 ] as const;
@@ -159,7 +159,7 @@ const HOME_PROJECT_INTRO = {
   description:
     "面向工控系统上线前验证场景，统一承载协议准备、任务编排、崩溃复现与证据链分析。",
   highlights: [
-    "聚合协议准备、Fuzz 任务、漏洞回溯与 GDB 调试链路",
+    "聚合协议准备、Fuzz 任务、漏洞回溯与智能调试链路",
     "支持多节点调度、结构化 payload 提交与结果分层收束",
     "适合在这里放置项目摘要、核心能力与部署价值说明",
   ],

@@ -1203,7 +1203,7 @@ export function DashboardView(): JSX.Element {
         />
         <MetricCard
           accent="violet"
-          title="GDB 会话数"
+          title="调试会话数"
           value={formatNumber(metrics.debugSessions.total)}
           description="Debug sessions"
           icon={Bug}

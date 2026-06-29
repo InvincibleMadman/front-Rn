@@ -169,6 +169,14 @@ export interface DebugOutputStreams {
   [key: string]: unknown;
 }
 
+export interface DebugAgentCommandEntry {
+  label?: string;
+  command?: string;
+  output_tail?: string;
+  output_preview?: string;
+  [key: string]: unknown;
+}
+
 export interface DebugReport {
   schema_version?: string;
   analysis_mode?: "locate_only" | "full" | string;
@@ -234,6 +242,14 @@ export interface DebugSession {
     target_argv?: string[];
     source_location?: Record<string, unknown>;
     output_streams?: DebugOutputStreams;
+    analysis_mode?: string;
+    analysis_strategy?: string;
+    evidence_mode?: string;
+    gdb_used?: boolean;
+    gdb_reason?: string;
+    replay_result?: Record<string, unknown>;
+    baseline_observation?: Record<string, unknown>;
+    gdb_agent_commands?: DebugAgentCommandEntry[];
     [key: string]: unknown;
   };
   classification?: Record<string, unknown>;
@@ -267,6 +283,14 @@ export interface DebugLiveSession {
   shared_libraries?: DebugSharedLibrary[];
   related_library_file?: string;
   output_streams?: DebugOutputStreams;
+  analysis_mode?: string;
+  analysis_strategy?: string;
+  evidence_mode?: string;
+  gdb_used?: boolean;
+  gdb_reason?: string;
+  replay_result?: Record<string, unknown>;
+  baseline_observation?: Record<string, unknown>;
+  gdb_agent_commands?: DebugAgentCommandEntry[];
   [key: string]: unknown;
 }
 

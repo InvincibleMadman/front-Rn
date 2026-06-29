@@ -17,7 +17,7 @@ export function DebugSourcePreview({
   if (!excerpt?.lines?.length) {
     return (
       <div className="rounded-md border border-dashed border-border bg-background px-4 py-8 text-[14px] text-muted-foreground">
-        {sourceAvailable ? "源码已定位，但当前没有可展示的片段。" : "当前工作区无法直接读取源码片段。"}
+        {sourceAvailable ? "已定位到源码，但当前没有可展示的代码片段。" : "当前工作区暂时无法提供源码片段。"}
       </div>
     );
   }
@@ -27,7 +27,7 @@ export function DebugSourcePreview({
       <div className="border-b border-border px-4 py-3">
         <p className="text-[14px] font-semibold text-foreground">{functionName || "源码片段"}</p>
         <p className="mt-1 break-all font-mono text-[12px] text-muted-foreground">
-          {filePath || "未解析文件"}{typeof line === "number" ? `:${line}` : ""}
+          {filePath || "源码位置未解析"}{typeof line === "number" ? `:${line}` : ""}
         </p>
       </div>
       <ScrollArea className="max-h-[30rem]">

@@ -1,5 +1,14 @@
-import { Archive, FolderTree, PackageOpen, Workflow } from "lucide-react";
+import { Archive, FolderTree, PackageOpen, Radar, Workflow } from "lucide-react";
 import type { MonitorContextViewModel } from "@/features/debug/debug-types";
+
+function Row({ label, value }: { label: string; value?: string }): JSX.Element {
+  return (
+    <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-3 px-3 py-2 last:border-b-0">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
+      <div className="min-w-0 break-all text-[13px] leading-6 text-foreground">{value || "暂无"}</div>
+    </div>
+  );
+}
 
 function Section({
   title,
@@ -11,20 +20,15 @@ function Section({
   rows: Array<{ label: string; value?: string }>;
 }): JSX.Element {
   return (
-    <div className="overflow-hidden rounded border border-border bg-background">
+    <section className="overflow-hidden rounded border border-border bg-background">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 text-[12px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         <Icon className="h-3.5 w-3.5" />
         {title}
       </div>
       <div className="divide-y divide-border">
-        {rows.map((row) => (
-          <div key={row.label} className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-3 px-3 py-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{row.label}</div>
-            <div className="min-w-0 break-all font-mono text-[13px] leading-6 text-foreground">{row.value || "—"}</div>
-          </div>
-        ))}
+        {rows.map((row) => <Row key={`${title}-${row.label}`} label={row.label} value={row.value} />)}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -32,49 +36,59 @@ export function DebugMonitorContext({ context, workspaceRef }: { context: Monito
   return (
     <div className="rounded-md border border-border bg-card p-3">
       <div className="mb-3 flex items-center justify-between gap-3 border-b border-border pb-2">
-        <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">会话上下文</p>
-        <p className="text-[11px] text-muted-foreground">IDE Inspector</p>
+        <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">调试上下文</p>
+        <p className="text-[11px] text-muted-foreground">观测 / 回放 / 决策</p>
       </div>
 
       <div className="grid gap-3">
         <Section
-          title="Session"
+          title="会话"
           icon={Workflow}
           rows={[
-            { label: "会话 ID", value: context.sessionId },
-            { label: "操作 ID", value: context.operationId },
-            { label: "传输", value: context.transportType },
-            { label: "历史记录", value: context.historyRecordId },
+            { label: "会话", value: context.sessionId },
+            { label: "操作", value: context.operationId },
+            { label: "策略", value: context.analysisStrategy },
+            { label: "GDB", value: context.gdbUsed ? `已启用${context.gdbReason ? ` · ${context.gdbReason}` : ""}` : "未启用" },
           ]}
         />
         <Section
-          title="Target"
+          title="回放"
+          icon={Radar}
+          rows={[
+            { label: "样本", value: context.artifactPath },
+            { label: "程序", value: context.binaryPath },
+            { label: "模式", value: context.replayMode },
+            { label: "目标", value: context.replayTarget || context.replayStatus },
+          ]}
+        />
+        <Section
+          title="目标"
           icon={PackageOpen}
           rows={[
-            { label: "Crash 输入", value: context.artifactPath },
-            { label: "二进制", value: context.binaryPath },
-            { label: "运行目录", value: context.cwd },
-            { label: "源码状态", value: context.sourceAvailable ? "ready" : "missing" },
+            { label: "CWD", value: context.cwd },
+            { label: "证据", value: context.evidenceMode },
+            { label: "源码", value: context.sourceAvailable ? "就绪" : "缺失" },
+            { label: "分析", value: context.analysisMode },
           ]}
         />
         <Section
-          title="Artifacts"
+          title="产物"
           icon={Archive}
           rows={[
-            { label: "调试报告", value: context.debugReportPath },
-            { label: "输出报告", value: context.reportPath },
+            { label: "调试", value: context.debugReportPath },
+            { label: "报告", value: context.reportPath },
+            { label: "归档", value: context.historyRecordId },
             { label: "关联库", value: context.relatedLibraryFile },
-            { label: "Workspace", value: workspaceRef || undefined },
           ]}
         />
         <Section
-          title="Path Map"
+          title="工作区"
           icon={FolderTree}
           rows={[
-            { label: "Artifact", value: context.artifactPath },
-            { label: "Binary", value: context.binaryPath },
-            { label: "Library", value: context.relatedLibraryFile },
-            { label: "Workspace", value: workspaceRef || undefined },
+            { label: "引用", value: workspaceRef || undefined },
+            { label: "传输", value: context.transportType },
+            { label: "回放状态", value: context.replayStatus },
+            { label: "关联库", value: context.relatedLibraryFile },
           ]}
         />
       </div>

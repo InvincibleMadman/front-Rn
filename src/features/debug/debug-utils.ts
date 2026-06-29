@@ -1,5 +1,6 @@
 import { formatDateTime, parseCommandInput, parseJsonObject } from "@/lib/utils/format";
 import type {
+  DebugAgentCommandEntry,
   DebugCandidate,
   DebugFrame,
   DebugLiveSession,
@@ -13,31 +14,43 @@ import type {
 import type { DebugLaunchFormState, DebugUiState, MonitorViewModel } from "@/features/debug/debug-types";
 
 export const DEBUG_SECTIONS = ["launch", "monitor", "history", "archive"] as const;
-export const DEBUG_STAGE_ORDER = ["created", "launching_target", "replaying_input", "waiting_signal", "collecting_context", "llm_reasoning", "locate_line", "classified", "archived", "failed"] as const;
+export const DEBUG_STAGE_ORDER = [
+  "created",
+  "launching_target",
+  "replaying_input",
+  "waiting_signal",
+  "collecting_context",
+  "llm_reasoning",
+  "locate_line",
+  "classified",
+  "archived",
+  "failed",
+] as const;
 
 const STATUS_DESCRIPTIONS: Record<string, string> = {
-  created: "会话已登记，等待启动目标与 crash 回放。",
-  launching_target: "正在准备目标程序与运行目录。",
-  replaying_input: "正在回放 crash 输入并构造调试现场。",
-  waiting_signal: "目标程序已经启动，正在等待异常信号。",
-  collecting_context: "已捕获异常，正在采集调用栈、寄存器和局部变量。",
-  llm_reasoning: "结构化上下文已就绪，正在形成根因推断。",
-  locate_line: "已经锁定到主要源码位置，正在整理落点。",
-  classified: "根因与分类结论已经形成，等待归档。",
-  archived: "当前调试结果已完成归档，可以回填复用。",
-  failed: "调试会话执行失败，请检查目标环境与调试参数。",
+  created: "会话已创建，等待启动。",
+  launching_target: "正在准备目标运行环境和工作目录。",
+  replaying_input: "正在回放样本并采集首轮证据。",
+  waiting_signal: "正在等待目标到达异常触发点。",
+  collecting_context: "正在采集调用栈、寄存器和运行时证据。",
+  llm_reasoning: "正在汇总崩溃证据并生成结构化结论。",
+  locate_line: "正在定位主要源码位置和焦点栈帧。",
+  classified: "分类结果已就绪，等待归档。",
+  archived: "调试结果已归档，可直接复用。",
+  failed: "调试会话失败，请检查运行参数和回放设置。",
 };
 
 const TIMELINE_SPECS = [
-  { key: "created", label: "创建", description: "登记会话与 crash 目标。" },
-  { key: "started", label: "启动", description: "目标程序与回放流程已开始。" },
-  { key: "captured", label: "捕获异常", description: "已拿到信号或聚焦 frame。" },
-  { key: "evidence", label: "收集证据", description: "调用栈、寄存器与局部变量已采集。" },
-  { key: "located", label: "定位代码", description: "已锁定源码行与关联文件。" },
-  { key: "archived", label: "归档", description: "结果已沉淀到历史记录。" },
+  { key: "created", label: "已创建", description: "会话元数据已登记。" },
+  { key: "started", label: "已启动", description: "目标启动与样本回放已经开始。" },
+  { key: "captured", label: "已捕获", description: "已观察到异常信号或焦点栈帧。" },
+  { key: "evidence", label: "证据完成", description: "运行时证据已可查看。" },
+  { key: "located", label: "已定位", description: "主要源码位置已经解析完成。" },
+  { key: "archived", label: "已归档", description: "最终结论已经归档。" },
 ] as const;
 
 const KEY_REGISTER_NAMES = ["rip", "eip", "pc", "rsp", "esp", "rbp", "ebp", "sp", "lr"];
+const UNRESOLVED_TEXT = "暂无";
 
 interface LogTailItem {
   kind?: string;
@@ -79,10 +92,15 @@ export function initialDebugUiState(): DebugUiState {
   };
 }
 
-export function textValue(value: unknown, fallback = "未解析"): string {
+export function textValue(value: unknown, fallback = UNRESOLVED_TEXT): string {
   if (value === null || value === undefined) return fallback;
   const text = String(value).trim();
   return text ? text : fallback;
+}
+
+function cleanValue(value: unknown): string {
+  const text = textValue(value, "");
+  return text && text !== UNRESOLVED_TEXT ? text : "";
 }
 
 export function emptyToUndefined(value: string): string | undefined {
@@ -153,8 +171,8 @@ export function formFromRequest(request?: DebugSessionRequest): Partial<DebugLau
   return {
     artifact_path: request.artifact_path ?? "",
     artifact_id: request.artifact_id ?? "",
-    binary_path: textValue(request.target?.binary_path, "").replace(/^未解析$/, ""),
-    cwd: textValue(request.target?.cwd, "").replace(/^未解析$/, ""),
+    binary_path: cleanValue(request.target?.binary_path),
+    cwd: cleanValue(request.target?.cwd),
     args_text: Array.isArray(request.target?.args) ? request.target.args.join(" ") : "",
     env_json: JSON.stringify(request.target?.env ?? {}, null, 2),
     transport_type: textValue(request.target?.transport_type, "stdin"),
@@ -163,6 +181,13 @@ export function formFromRequest(request?: DebugSessionRequest): Partial<DebugLau
     ready_check_json: JSON.stringify(request.target?.ready_check ?? {}, null, 2),
     kb_entry_ids_text: Array.isArray(request.kb_entry_ids) ? request.kb_entry_ids.join("\n") : "",
     source_doc_ids_text: Array.isArray(request.source_doc_ids) ? request.source_doc_ids.join("\n") : "",
+    replay_mode: request.replay?.mode === "script" ? "script" : "builtin_transport",
+    replay_script_ref: cleanValue(request.replay?.script_ref),
+    replay_runtime: request.replay?.runtime ?? "python3",
+    replay_args_text: Array.isArray(request.replay?.args) ? request.replay.args.join(" ") : "",
+    replay_env_json: JSON.stringify(request.replay?.env ?? {}, null, 2),
+    replay_timeout: request.replay?.timeout_sec !== undefined ? String(request.replay.timeout_sec) : "10",
+    prep_steps_text: stringifyPrepSteps(request.prep_steps),
   };
 }
 
@@ -176,6 +201,25 @@ export function buildCreatePayload(protocol: string, form: DebugLaunchFormState,
   const replayArgs = parseCommandInput(form.replay_args_text);
   const replayEnv = Object.fromEntries(Object.entries(parseJsonObject(form.replay_env_json)).map(([key, value]) => [key, String(value)]));
   const prepSteps = parsePrepSteps(form.prep_steps_text);
+  const target: DebugSessionRequest["target"] = {
+    ...(base?.target ?? {}),
+    cwd: emptyToUndefined(form.cwd),
+    args: parseCommandInput(form.args_text),
+    env: Object.fromEntries(Object.entries(parseJsonObject(form.env_json)).map(([key, value]) => [key, String(value)])),
+    protocol: protocol.trim(),
+    transport_type: form.transport_type.trim() || "stdin",
+    transport_config: parseJsonObject(form.transport_config_json),
+    startup_timeout: Number(form.startup_timeout || 3),
+    ready_check: parseJsonObject(form.ready_check_json),
+  };
+
+  const binaryPath = form.binary_path.trim();
+  if (binaryPath) {
+    target.binary_path = binaryPath;
+  } else {
+    delete target.binary_path;
+  }
+
   return {
     operation_id: base?.operation_id,
     protocol: protocol.trim(),
@@ -186,26 +230,17 @@ export function buildCreatePayload(protocol: string, form: DebugLaunchFormState,
     source_doc_ids: splitTextList(form.source_doc_ids_text),
     run_mode: base?.run_mode ?? "async",
     analysis_mode: base?.analysis_mode ?? "locate_only",
-    target: {
-      ...(base?.target ?? {}),
-      binary_path: form.binary_path.trim(),
-      cwd: emptyToUndefined(form.cwd),
-      args: parseCommandInput(form.args_text),
-      env: Object.fromEntries(Object.entries(parseJsonObject(form.env_json)).map(([key, value]) => [key, String(value)])),
-      protocol: protocol.trim(),
-      transport_type: form.transport_type.trim(),
-      transport_config: parseJsonObject(form.transport_config_json),
-      startup_timeout: Number(form.startup_timeout || 3),
-      ready_check: parseJsonObject(form.ready_check_json),
-    },
-    replay: replayMode === "script" ? {
-      mode: "script",
-      script_ref: emptyToUndefined(form.replay_script_ref),
-      runtime: form.replay_runtime,
-      args: replayArgs,
-      env: replayEnv,
-      timeout_sec: Number(form.replay_timeout || 10),
-    } : { mode: "builtin_transport" },
+    target,
+    replay: replayMode === "script"
+      ? {
+          mode: "script",
+          script_ref: emptyToUndefined(form.replay_script_ref),
+          runtime: form.replay_runtime,
+          args: replayArgs,
+          env: replayEnv,
+          timeout_sec: Number(form.replay_timeout || 10),
+        }
+      : { mode: "builtin_transport" },
     prep_steps: prepSteps,
   };
 }
@@ -226,9 +261,9 @@ export function isTerminalStatus(status?: string): boolean {
 }
 
 function formatLocationLabel(frame?: DebugFrame | null): string {
-  if (!frame) return "未定位";
-  const fn = textValue(frame.function, "unknown");
-  const file = textValue(frame.file_path || frame.library, "未解析");
+  if (!frame) return "暂无焦点栈帧";
+  const fn = textValue(frame.function, "未知函数");
+  const file = textValue(frame.file_path || frame.library, UNRESOLVED_TEXT);
   const line = typeof frame.line === "number" ? `:${frame.line}` : "";
   const index = frame.index !== undefined ? `#${frame.index}` : "#?";
   return `${index} · ${fn} · ${file}${line}`;
@@ -245,7 +280,7 @@ function hasCapturedSignal(session?: DebugSession | null, live?: DebugLiveSessio
     session?.current_focus?.signal ||
     live?.latest_evidence_summary?.signal ||
     session?.latest_evidence_summary?.signal ||
-    stageRank(live?.status ?? session?.status) >= stageRank("collecting_context")
+    stageRank(live?.status ?? session?.status) >= stageRank("collecting_context"),
   );
 }
 
@@ -254,7 +289,7 @@ function hasEvidence(session?: DebugSession | null, live?: DebugLiveSession | nu
     (live?.frames?.length || session?.gdb_context?.frames?.length || 0) > 0 ||
     (live?.registers_map?.length || session?.gdb_context?.registers_map?.length || 0) > 0 ||
     (live?.locals_map?.length || session?.gdb_context?.locals_map?.length || 0) > 0 ||
-    stageRank(live?.status ?? session?.status) >= stageRank("collecting_context")
+    stageRank(live?.status ?? session?.status) >= stageRank("collecting_context"),
   );
 }
 
@@ -279,6 +314,18 @@ function extractOutputStreams(session?: DebugSession | null, live?: DebugLiveSes
   return live?.output_streams ?? session?.gdb_context?.output_streams ?? null;
 }
 
+function replayResultFrom(session?: DebugSession | null, live?: DebugLiveSession | null): Record<string, unknown> {
+  return (live?.replay_result as Record<string, unknown> | undefined)
+    ?? (session?.gdb_context?.replay_result as Record<string, unknown> | undefined)
+    ?? {};
+}
+
+function baselineObservationFrom(session?: DebugSession | null, live?: DebugLiveSession | null): Record<string, unknown> {
+  return (live?.baseline_observation as Record<string, unknown> | undefined)
+    ?? (session?.gdb_context?.baseline_observation as Record<string, unknown> | undefined)
+    ?? {};
+}
+
 function buildOutput(session?: DebugSession | null, live?: DebugLiveSession | null, logItems: LogTailItem[] = []): MonitorViewModel["output"] {
   const streams = extractOutputStreams(session, live);
   const gdbLog = logItems
@@ -286,14 +333,16 @@ function buildOutput(session?: DebugSession | null, live?: DebugLiveSession | nu
     .map((item) => String(item.message ?? "").trim())
     .filter(Boolean)
     .join("\n");
+  const replayResult = replayResultFrom(session, live);
 
   const targetOutputAvailable = Boolean(streams?.can_separate_target_output);
   const targetOutputParts = [streams?.target_stdout, streams?.target_stderr]
     .map((item) => String(item ?? "").trim())
     .filter(Boolean);
+
   const targetOutput = targetOutputAvailable
-    ? (targetOutputParts.join("\n\n") || "当前目标程序没有可显示的 stdout/stderr。")
-    : "当前调试链路运行在 gdb batch 模式下，无法可靠区分 target stdout/stderr 与 GDB transcript；下方已回退展示调试混合输出。";
+    ? (targetOutputParts.join("\n\n") || "暂未捕获目标 stdout/stderr。")
+    : cleanValue(streams?.mixed_output ?? session?.gdb_context?.stdout_stderr_tail) || "暂未捕获运行输出。";
 
   const gdbTranscript = [
     streams?.gdb_transcript,
@@ -302,22 +351,25 @@ function buildOutput(session?: DebugSession | null, live?: DebugLiveSession | nu
     session?.gdb_context?.frame_locals,
     session?.gdb_context?.registers,
     session?.gdb_context?.shared_libraries_text,
-    streams?.mixed_output,
   ]
     .map((item) => String(item ?? "").trim())
     .filter(Boolean)
-    .join("\n\n") || "暂无 GDB transcript";
+    .join("\n\n") || "暂无调试器转录记录。";
 
-  const argv = Array.isArray(session?.gdb_context?.target_argv) ? session!.gdb_context!.target_argv!.map((item) => String(item)) : [];
+  const argv = Array.isArray(session?.gdb_context?.target_argv)
+    ? session.gdb_context.target_argv.map((item) => String(item))
+    : [];
+
   return {
     targetOutput,
     gdbTranscript,
     argv,
     targetOutputAvailable,
     targetOutputDisclaimer: targetOutputAvailable
-      ? "当前内容来自已分离的 target stdout/stderr。"
-      : "当前内容并非纯目标程序输出，而是严格标记后的回退展示。",
+      ? "当前展示的是运行期捕获到的目标 stdout/stderr。"
+      : "由于无法分离目标输出流，当前展示合并后的运行证据。",
     streams,
+    replaySummary: formatReplaySummary(replayResult),
   };
 }
 
@@ -376,27 +428,96 @@ export function buildPlanFlow(session?: DebugSession | null, live?: DebugLiveSes
   const items = [...sessionSteps, ...liveSteps]
     .map((item, index) => ({
       at: item.at,
-      kind: textValue(item.kind, "stage"),
+      kind: textValue(item.kind, "阶段"),
       title: textValue(item.title, `步骤 ${index + 1}`),
       message: textValue(item.message, "暂无说明"),
       evidence: item.evidence,
       active: item.active,
     }))
     .slice(-12);
+
   if (items.length > 0) return items;
-  return [{ kind: "stage", title: "等待调试会话", message: "发起一次调试会话后，这里会显示智能体步骤流。", active: true }];
+  return [{
+    kind: "idle",
+    title: "等待调试会话",
+    message: "启动新会话或重新打开历史会话后，这里会显示运行计划流。",
+    active: true,
+  }];
 }
 
 function buildFocusSummary(frame: DebugFrame | null | undefined, signal?: string): string {
-  if (!frame) return signal ? `${signal} 已捕获，但当前还没有解析到可用 frame。` : "尚未捕获有效 frame。";
-  const location = `${textValue(frame.function, "unknown")} · ${textValue(frame.file_path || frame.library, "未解析")}${typeof frame.line === "number" ? `:${frame.line}` : ""}`;
-  return signal ? `${signal} 首次落在 ${location}` : location;
+  if (!frame) {
+    return signal ? `已观测到 ${signal}，但暂时还没有结构化焦点栈帧。` : "暂未捕获焦点栈帧。";
+  }
+  const location = `${textValue(frame.function, "未知函数")} · ${textValue(frame.file_path || frame.library, UNRESOLVED_TEXT)}${typeof frame.line === "number" ? `:${frame.line}` : ""}`;
+  return signal ? `${signal} 首次命中位置：${location}` : location;
 }
 
 function buildKeyRegisters(registers: DebugRegister[]): DebugRegister[] {
   const byName = new Map(registers.map((item) => [String(item.name ?? "").toLowerCase(), item]));
   const picked = KEY_REGISTER_NAMES.map((name) => byName.get(name)).filter(Boolean) as DebugRegister[];
   return picked.length ? picked : registers.slice(0, 6);
+}
+
+function formatReplaySummary(result?: Record<string, unknown> | null): string {
+  const mode = textValue(result?.mode, "builtin_transport");
+  const sent = result?.sent === true ? "已发送" : result?.sent === false ? "未发送" : "未知";
+  const target = cleanValue(result?.target);
+  const attempts = typeof result?.attempts === "number" ? `尝试 ${result.attempts} 次` : "";
+  const reason = cleanValue(result?.reason);
+  const parts = [mode, sent, target, attempts, reason].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "回放尚未开始。";
+}
+
+function toStrategyLabel(strategy?: string, gdbUsed?: boolean): string {
+  if (strategy === "baseline_plus_gdb" || gdbUsed) return "综合分析（已升级 GDB）";
+  if (strategy === "gdb_enhanced") return "GDB 增强调试";
+  if (strategy === "baseline_observation") return "崩溃证据归纳";
+  if (strategy === "baseline_skipped") return "等待 GDB 补充";
+  return gdbUsed ? "综合分析（已升级 GDB）" : "崩溃证据归纳";
+}
+
+function toEvidenceModeLabel(mode?: string): string {
+  if (mode === "gdb_enhanced") return "GDB 增强证据";
+  if (mode === "crash_observation") return "运行时 / sanitizer 证据";
+  if (mode === "pending_gdb") return "等待 GDB 证据";
+  return "运行时证据";
+}
+
+function replayTargetFrom(result?: Record<string, unknown> | null): string | undefined {
+  const target = cleanValue(result?.target);
+  return target || undefined;
+}
+
+function buildEvidenceSummary(
+  report: DebugSession["debug_report"] | undefined,
+  relatedLibraryFile: string,
+  gdbContext: DebugSession["gdb_context"] | undefined,
+  baselineObservation: Record<string, unknown>,
+): Array<{ label: string; value: string }> {
+  const baselineSource = asRecord(baselineObservation.source_location);
+  const baselineLocation = baselineSource?.file
+    ? `${String(baselineSource.file)}${baselineSource.line ? `:${baselineSource.line}` : ""}`
+    : "";
+  const confidence = typeof report?.confidence === "number" ? String(report.confidence) : "";
+  const items = [
+    { label: "异常信号", value: textValue(report?.signal ?? gdbContext?.signal ?? baselineObservation.signal, UNRESOLVED_TEXT) },
+    { label: "CWE", value: textValue(report?.cwe, UNRESOLVED_TEXT) },
+    { label: "置信度", value: confidence || UNRESOLVED_TEXT },
+    { label: "关联库", value: relatedLibraryFile || UNRESOLVED_TEXT },
+    { label: "基线行号", value: baselineLocation || UNRESOLVED_TEXT },
+  ];
+  return items;
+}
+
+function gdbAgentCommandsFrom(session?: DebugSession | null, live?: DebugLiveSession | null): DebugAgentCommandEntry[] {
+  if (Array.isArray(live?.gdb_agent_commands) && live.gdb_agent_commands.length) {
+    return live.gdb_agent_commands;
+  }
+  if (Array.isArray(session?.gdb_context?.gdb_agent_commands)) {
+    return session.gdb_context.gdb_agent_commands;
+  }
+  return [];
 }
 
 export function buildMonitorViewModel(
@@ -410,17 +531,18 @@ export function buildMonitorViewModel(
   const locals = extractLocals(session, live);
   const sharedLibraries = (live?.shared_libraries?.length ? live.shared_libraries : session?.gdb_context?.shared_libraries) ?? [];
   const report = session?.debug_report;
+  const gdbContext = session?.gdb_context;
   const location = asRecord(live?.location_result) ?? asRecord(report?.location_result);
   const relatedLibraryFile = textValue(
     live?.related_library_file ??
       session?.current_focus?.related_library_file ??
-      session?.gdb_context?.related_library_file ??
+      gdbContext?.related_library_file ??
       location?.related_library_file,
-    "未解析",
+    UNRESOLVED_TEXT,
   );
   const source = {
-    filePath: typeof location?.primary_file_path === "string" ? location.primary_file_path : textValue(focusFrame?.file_path, "").replace(/^未解析$/, ""),
-    functionName: typeof location?.primary_function === "string" ? location.primary_function : textValue(focusFrame?.function, "").replace(/^未解析$/, ""),
+    filePath: typeof location?.primary_file_path === "string" ? location.primary_file_path : cleanValue(focusFrame?.file_path),
+    functionName: typeof location?.primary_function === "string" ? location.primary_function : cleanValue(focusFrame?.function),
     line: typeof location?.primary_line === "number" ? location.primary_line : typeof focusFrame?.line === "number" ? focusFrame.line : undefined,
     excerpt: (location?.source_excerpt as MonitorViewModel["source"]["excerpt"]) ?? report?.location_result?.source_excerpt ?? null,
     workspaceRef: typeof location?.source_workspace_ref === "string" ? location.source_workspace_ref : null,
@@ -429,7 +551,13 @@ export function buildMonitorViewModel(
 
   const output = buildOutput(session, live, logItems);
   const focusSummary = buildFocusSummary(focusFrame, session?.latest_evidence_summary?.signal ?? live?.latest_evidence_summary?.signal);
-  const stackText = textValue(report?.stack_summary ?? session?.latest_evidence_summary?.stack_summary ?? session?.gdb_context?.backtrace, "暂无调用栈文本");
+  const stackText = textValue(report?.stack_summary ?? session?.latest_evidence_summary?.stack_summary ?? gdbContext?.backtrace, "暂无调用栈摘要。");
+  const analysisStrategyRaw = String(live?.analysis_strategy ?? gdbContext?.analysis_strategy ?? "baseline_observation");
+  const gdbUsed = Boolean(live?.gdb_used ?? gdbContext?.gdb_used);
+  const replayResult = replayResultFrom(session, live);
+  const evidenceModeRaw = String(live?.evidence_mode ?? gdbContext?.evidence_mode ?? (gdbUsed ? "gdb_enhanced" : "crash_observation"));
+  const gdbReason = cleanValue(live?.gdb_reason ?? gdbContext?.gdb_reason);
+  const baselineObservation = baselineObservationFrom(session, live);
 
   const structured = {
     coarse_type: report?.coarse_type,
@@ -443,26 +571,39 @@ export function buildMonitorViewModel(
     fix_suggestion: report?.fix_suggestion,
     poc_concept: report?.poc_concept,
     related_library_file: relatedLibraryFile,
+    analysis_strategy: toStrategyLabel(analysisStrategyRaw, gdbUsed),
+    gdb_used: gdbUsed,
   };
+
+  const rawAgentCommands = gdbAgentCommandsFrom(session, live);
 
   return {
     header: {
       protocol: textValue(session?.protocol, "未选择协议"),
-      crashType: textValue(report?.coarse_type ?? report?.vuln_type ?? report?.error_type, "待识别"),
+      crashType: textValue(report?.coarse_type ?? report?.vuln_type ?? report?.error_type, "待分析"),
       focusFrame: formatLocationLabel(focusFrame),
       relatedLibraryFile,
       status: textValue(live?.status ?? session?.status, "created"),
       statusDescription: statusDescription(live?.status ?? session?.status),
+      debuggerMode: gdbUsed ? "已升级到 GDB" : "仅做崩溃观测",
       sessionId: session?.session_id,
       operationId: live?.operation_id ?? session?.operation_id,
       updatedAt: (live?.updated_at ?? session?.updated_at) ? formatDateTime(live?.updated_at ?? session?.updated_at) : undefined,
     },
     timeline: buildTimeline(session, live),
     context: {
-      artifactPath: textValue(session?.request?.artifact_path, "未提供"),
-      binaryPath: textValue(session?.request?.target?.binary_path, "未提供"),
-      cwd: textValue(session?.request?.target?.cwd, "未提供"),
+      artifactPath: textValue(session?.request?.artifact_path, UNRESOLVED_TEXT),
+      binaryPath: textValue(session?.request?.target?.binary_path, UNRESOLVED_TEXT),
+      cwd: textValue(session?.request?.target?.cwd, UNRESOLVED_TEXT),
       transportType: textValue(session?.request?.target?.transport_type, "stdin"),
+      replayMode: textValue(session?.request?.replay?.mode, "builtin_transport"),
+      analysisMode: textValue(session?.request?.analysis_mode, "locate_only"),
+      analysisStrategy: toStrategyLabel(analysisStrategyRaw, gdbUsed),
+      evidenceMode: toEvidenceModeLabel(evidenceModeRaw),
+      gdbUsed,
+      gdbReason: gdbReason || undefined,
+      replayTarget: replayTargetFrom(replayResult),
+      replayStatus: formatReplaySummary(replayResult),
       sessionId: session?.session_id,
       operationId: live?.operation_id ?? session?.operation_id,
       sourceAvailable: source.sourceAvailable,
@@ -484,6 +625,12 @@ export function buildMonitorViewModel(
       stackText,
       focusSummary,
       keyRegisters: buildKeyRegisters(registers),
+      gdbAgentCommands: rawAgentCommands.slice(0, 8).map((item) => ({
+        label: cleanValue(item.label) || "步骤",
+        command: cleanValue(item.command),
+        preview: cleanValue(item.output_preview ?? item.output_tail),
+      })),
+      evidenceSummary: buildEvidenceSummary(report, relatedLibraryFile, gdbContext, baselineObservation),
     },
     live: live ?? null,
     session: session ?? null,
@@ -494,11 +641,12 @@ export function buildIdleMonitorViewModel(protocol = ""): MonitorViewModel {
   return {
     header: {
       protocol: textValue(protocol, "未选择协议"),
-      crashType: "待识别",
-      focusFrame: "未定位",
-      relatedLibraryFile: "未解析",
-      status: "待启动",
-      statusDescription: "当前未加载具体调试会话",
+      crashType: "待分析",
+      focusFrame: "暂无焦点栈帧",
+      relatedLibraryFile: UNRESOLVED_TEXT,
+      status: "idle",
+      statusDescription: "当前还没有加载调试会话。",
+      debuggerMode: "仅做崩溃观测",
       sessionId: undefined,
       operationId: undefined,
       updatedAt: undefined,
@@ -512,26 +660,32 @@ export function buildIdleMonitorViewModel(protocol = ""): MonitorViewModel {
       description: item.description,
     })),
     context: {
-      artifactPath: "未提供",
-      binaryPath: "未提供",
-      cwd: "未提供",
+      artifactPath: UNRESOLVED_TEXT,
+      binaryPath: UNRESOLVED_TEXT,
+      cwd: UNRESOLVED_TEXT,
       transportType: "stdin",
+      replayMode: "builtin_transport",
+      analysisMode: "locate_only",
+      analysisStrategy: "崩溃证据归纳",
+      evidenceMode: "运行时证据",
+      gdbUsed: false,
+      gdbReason: undefined,
+      replayTarget: undefined,
+      replayStatus: "回放尚未开始。",
       sessionId: undefined,
       operationId: undefined,
       sourceAvailable: false,
       historyRecordId: undefined,
       debugReportPath: undefined,
       reportPath: undefined,
-      relatedLibraryFile: "未解析",
+      relatedLibraryFile: UNRESOLVED_TEXT,
     },
-    planFlow: [
-      {
-        kind: "idle",
-        title: "等待调试会话",
-        message: "在“启动”页发起定位，或在“记录 / 归档”页回填历史参数后，这里会持续刷新实时步骤流",
-        active: true,
-      },
-    ],
+    planFlow: [{
+      kind: "idle",
+      title: "等待调试会话",
+      message: "启动新会话或重新打开历史会话后，这里会显示监控数据。",
+      active: true,
+    }],
     source: {
       filePath: undefined,
       functionName: undefined,
@@ -541,12 +695,13 @@ export function buildIdleMonitorViewModel(protocol = ""): MonitorViewModel {
       sourceAvailable: false,
     },
     output: {
-      targetOutput: "当前还没有可显示的目标程序 I/O",
-      gdbTranscript: "当前还没有 GDB transcript",
+      targetOutput: "暂未捕获目标输出。",
+      gdbTranscript: "暂未生成调试器转录。",
       argv: [],
       targetOutputAvailable: false,
-      targetOutputDisclaimer: "未启动会话前不会展示任何运行输出",
+      targetOutputDisclaimer: "会话启动后会在这里显示运行输出。",
       streams: null,
+      replaySummary: "回放尚未开始。",
     },
     details: {
       frames: [],
@@ -555,9 +710,11 @@ export function buildIdleMonitorViewModel(protocol = ""): MonitorViewModel {
       registers: [],
       sharedLibraries: [],
       structured: {},
-      stackText: "暂无调用栈文本",
-      focusSummary: "尚未捕获有效 frame",
+      stackText: "暂无调用栈摘要。",
+      focusSummary: "暂未捕获焦点栈帧。",
       keyRegisters: [],
+      gdbAgentCommands: [],
+      evidenceSummary: [],
     },
     live: null,
     session: null,
