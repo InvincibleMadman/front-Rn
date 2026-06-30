@@ -6,6 +6,8 @@ export function translateJobStatus(status: string | JobStatus): string {
     starting: "启动中",
     running: "运行中",
     stopping: "停止中",
+    cancelled: "已停止",
+    partial: "部分完成",
     finished: "已完成",
     failed: "失败",
     pending: "等待中",

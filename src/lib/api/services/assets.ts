@@ -147,9 +147,9 @@ export const assetsApi = {
     return response.data;
   },
 
-  async getWorkspaceTree(protocol: string, scope: string, path = "/"): Promise<WorkspaceTreeResponse> {
+  async getWorkspaceTree(protocol: string, scope: string, path = "/", options?: { refresh?: boolean }): Promise<WorkspaceTreeResponse> {
     const response = await apiClient.requestEnvelope<WorkspaceTreeResponse>(
-      `${nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/workspace/tree`)}${queryString({ scope, path })}`,
+      `${nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/workspace/tree`)}${queryString({ scope, path, refresh: options?.refresh })}`,
       { credentials: "include" },
     );
     return {

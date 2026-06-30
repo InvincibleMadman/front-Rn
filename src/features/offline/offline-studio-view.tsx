@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -14,6 +14,7 @@ import {
   Search,
   ShieldAlert,
   Sparkles,
+  Square,
   UploadCloud,
   Wand2,
   ChevronDown,
@@ -38,12 +39,13 @@ import { DonutChart } from "@/components/charts/donut-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { buildAssistantApi } from "@/lib/api/services/build-assistant";
+import { assetsApi } from "@/lib/api/services/assets";
 import { offlineApi } from "@/lib/api/services/offline";
-import { apiClient } from "@/lib/api/client";
+import { ApiClientError, apiClient } from "@/lib/api/client";
 import { protocolsApi } from "@/lib/api/services/protocols";
 import { vuldocsApi } from "@/lib/api/services/vuldocs";
 import { kbApi } from "@/lib/api/services/kb";
-import { createOperationId } from "@/lib/api/services/operations";
+import { createOperationId, operationsApi } from "@/lib/api/services/operations";
 import { useOperationLogDockSync } from "@/hooks/use-operation-log-dock-sync";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { cn } from "@/lib/utils/cn";
@@ -69,6 +71,7 @@ import type {
   VulDocUploadResponse,
   KbEntry,
 } from "@/types/api/vuldocs";
+import type { WorkspacePreviewResponse, WorkspaceTreeItem } from "@/types/api/assets";
 
 const FIXED_PROTOCOL_SPEC_NAME = "protocol_spec.json";
 const FIXED_RISK_ANALYSIS_NAME = "final_analysis.json";
@@ -211,6 +214,59 @@ function workspaceRef(protocol: string, scope: ScopeName, relativePath = ""): st
   return cleaned
     ? `workspace://${normalizedProtocol}/${scope}/${cleaned}`
     : `workspace://${normalizedProtocol}/${scope}/`;
+}
+
+function parseWorkspaceRefValue(value?: string | null): { protocol: string; scope: string; virtualPath: string } | null {
+  const ref = String(value ?? "").trim();
+  const match = /^workspace:\/\/([^/]+)\/([^/]+)(\/.*)?$/.exec(ref);
+  if (!match) return null;
+  return {
+    protocol: match[1],
+    scope: match[2],
+    virtualPath: match[3] || "/",
+  };
+}
+
+function parsePreviewContent(preview?: WorkspacePreviewResponse | null): unknown {
+  if (!preview?.content) return null;
+  if (preview.preview_type === "json") {
+    try {
+      return JSON.parse(preview.content);
+    } catch {
+      return preview.content;
+    }
+  }
+  return preview.content;
+}
+
+function formatFileSize(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(value >= 10 * 1024 ? 0 : 1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(value >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+}
+
+async function loadWorkspacePreviewByRef(workspaceRefValue?: string | null): Promise<WorkspacePreviewResponse | null> {
+  const parts = parseWorkspaceRefValue(workspaceRefValue);
+  if (!parts) return null;
+  try {
+    return await assetsApi.getWorkspacePreview(parts.protocol, parts.scope, parts.virtualPath);
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+async function loadWorkspaceTreeItemsByRef(workspaceRefValue?: string | null): Promise<WorkspaceTreeItem[]> {
+  const parts = parseWorkspaceRefValue(workspaceRefValue);
+  if (!parts) return [];
+  try {
+    const payload = await assetsApi.getWorkspaceTree(parts.protocol, parts.scope, parts.virtualPath, { refresh: true });
+    return (payload.items ?? []).filter((item) => item.type === "file");
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 404) return [];
+    throw error;
+  }
 }
 
 function scopeDisplay(scope: ScopeName, relativePath = "", trailingSlash = false): string {
@@ -546,6 +602,8 @@ export function OfflineStudioView(): JSX.Element {
   const [selectedKbEntryId, setSelectedKbEntryId] = useState("");
   const [riskUploadProtocol, setRiskUploadProtocol] = useState("");
   const [riskUploadRunning, setRiskUploadRunning] = useState(false);
+  const [cancelRequestedTabs, setCancelRequestedTabs] = useState<Partial<Record<OfflineTab, boolean>>>({});
+  const [cancelingOperationId, setCancelingOperationId] = useState<string | null>(null);
 
   const protocolsQuery = useQuery({
     queryKey: ["protocols"],
@@ -702,8 +760,33 @@ export function OfflineStudioView(): JSX.Element {
     setSearchParams(nextParams, { replace: true });
   };
 
-  const setOp = (tab: OfflineTab, id: string): void =>
+  const setOp = (tab: OfflineTab, id: string): void => {
     setOperationIds((state) => ({ ...state, [tab]: id }));
+    setCancelRequestedTabs((state) => ({ ...state, [tab]: false }));
+  };
+
+  const cancelOperationMutation = useMutation({
+    mutationFn: ({ operationId }: { operationId: string }) =>
+      operationsApi.cancelOperation(operationId, "Stopped from offline studio"),
+    onMutate: ({ operationId }) => {
+      setCancelingOperationId(operationId);
+    },
+    onSettled: () => {
+      setCancelingOperationId(null);
+    },
+  });
+
+  const requestStop = (tab: OfflineTab, operationId?: string): void => {
+    if (!operationId) return;
+    cancelOperationMutation.mutate({ operationId }, {
+      onSuccess: () => {
+        setCancelRequestedTabs((state) => ({ ...state, [tab]: true }));
+      },
+    });
+  };
+
+  const isCancellingOperation = (operationId?: string): boolean =>
+    Boolean(operationId) && cancelOperationMutation.isPending && cancelingOperationId === operationId;
 
   const protocolMutation = useMutation({
     mutationFn: offlineApi.protocolAnalyze,
@@ -917,6 +1000,81 @@ export function OfflineStudioView(): JSX.Element {
     return allKbEntries.find((entry) => kbEntryKey(entry) === selectedKbEntryId) ?? allKbEntries[0] ?? null;
   }, [allKbEntries, selectedKbEntryId]);
 
+  const protocolSpecPreviewQuery = useQuery({
+    queryKey: ["offline", "protocol-spec-preview", protocolAssets?.specFileRef, operationIds.protocol, protocolPrimaryPathFromResponse(protocolMutation.data ?? {})],
+    queryFn: () => loadWorkspacePreviewByRef(protocolAssets?.specFileRef),
+    enabled: Boolean(protocolAssets?.specFileRef) && (Boolean(operationIds.protocol) || Boolean(protocolMutation.data)),
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchInterval: protocolMutation.isPending ? 1200 : false,
+  });
+
+  const seedsOutputFilesQuery = useQuery({
+    queryKey: ["offline", "seeds-output-files", seedsAssets?.seedsOutputRef, operationIds.seeds, seedsMutation.data?.output_dir],
+    queryFn: () => loadWorkspaceTreeItemsByRef(seedsAssets?.seedsOutputRef),
+    enabled: Boolean(seedsAssets?.seedsOutputRef) && (Boolean(operationIds.seeds) || Boolean(seedsMutation.data)),
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchInterval: seedsMutation.isPending ? 1200 : false,
+  });
+
+  const riskAnalysisPreviewQuery = useQuery({
+    queryKey: ["offline", "risk-analysis-preview", riskAnalyzeAssets?.riskAnalysisRef, operationIds["risk-analyze"], riskAnalyzeMutation.data?.analysis_path],
+    queryFn: () => loadWorkspacePreviewByRef(riskAnalyzeAssets?.riskAnalysisRef),
+    enabled: Boolean(riskAnalyzeAssets?.riskAnalysisRef) && (Boolean(operationIds["risk-analyze"]) || Boolean(riskAnalyzeMutation.data)),
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchInterval: riskAnalyzeMutation.isPending ? 1200 : false,
+  });
+
+  const protocolPreviewData = useMemo(
+    () =>
+      parsePreviewContent(protocolSpecPreviewQuery.data) ??
+      (protocolMutation.data
+        ? {
+            ...protocolMutation.data,
+            frontend_reference: {
+              primaryPath: protocolPrimaryPathFromResponse(protocolMutation.data),
+              modelSpecRef: protocolAssets?.specFileRef ?? null,
+              relatedPaths: protocolRelatedPathsFromResponse(protocolMutation.data),
+            },
+          }
+        : { status: "idle" }),
+    [protocolAssets?.specFileRef, protocolMutation.data, protocolSpecPreviewQuery.data],
+  );
+
+  const liveSeedItems = useMemo(
+    () =>
+      [...(seedsOutputFilesQuery.data ?? [])]
+        .filter((item) => item.name !== "generation_metadata.json")
+        .sort((left, right) => (right.updated_at ?? 0) - (left.updated_at ?? 0) || String(left.name).localeCompare(String(right.name))),
+    [seedsOutputFilesQuery.data],
+  );
+
+  const liveRiskAnalyzeData = useMemo<RiskAnalyzeResponse | null>(() => {
+    const parsed = parsePreviewContent(riskAnalysisPreviewQuery.data);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as RiskAnalyzeResponse;
+  }, [riskAnalysisPreviewQuery.data]);
+
+  useEffect(() => {
+    if (!protocolMutation.isPending && cancelRequestedTabs.protocol) {
+      setCancelRequestedTabs((state) => ({ ...state, protocol: false }));
+    }
+  }, [cancelRequestedTabs.protocol, protocolMutation.isPending]);
+
+  useEffect(() => {
+    if (!seedsMutation.isPending && cancelRequestedTabs.seeds) {
+      setCancelRequestedTabs((state) => ({ ...state, seeds: false }));
+    }
+  }, [cancelRequestedTabs.seeds, seedsMutation.isPending]);
+
+  useEffect(() => {
+    if (!riskAnalyzeMutation.isPending && cancelRequestedTabs["risk-analyze"]) {
+      setCancelRequestedTabs((state) => ({ ...state, "risk-analyze": false }));
+    }
+  }, [cancelRequestedTabs["risk-analyze"], riskAnalyzeMutation.isPending]);
+
   useOperationLogDockSync(
     [
       { operationId: operationIds.protocol, source: "offline", label: "Protocol analysis", enabled: protocolMutation.isPending && Boolean(operationIds.protocol) },
@@ -952,6 +1110,10 @@ export function OfflineStudioView(): JSX.Element {
   return (
     <div className="space-y-6">
       <ApiErrorReporter error={uploadError} title="风险 JSON 上传失败" source="offline" />
+      <ApiErrorReporter error={cancelOperationMutation.error} title="停止离线任务失败" source="offline" />
+      <ApiErrorReporter error={protocolSpecPreviewQuery.error} title="协议规范实时预览失败" source="offline" />
+      <ApiErrorReporter error={seedsOutputFilesQuery.error} title="种子文件列表读取失败" source="offline" />
+      <ApiErrorReporter error={riskAnalysisPreviewQuery.error} title="风险分析实时预览失败" source="offline" />
       <ApiErrorReporter error={riskPreviewMutation.error} title="风险结果预览失败" source="offline" />
       <ApiErrorReporter error={instrumentMutation.error} title="插桩处理失败" source="offline" />
       <ApiErrorReporter error={vuldocUploadMutation.error} title="VulDoc 上传失败" source="offline" />
@@ -1110,12 +1272,21 @@ export function OfflineStudioView(): JSX.Element {
                       <Textarea {...protocolForm.register("content")} />
                     </FormField>
                   </div>
-                  <div className="md:col-span-2">
+                  <div className="md:col-span-2 flex flex-wrap gap-3">
                     <Button type="submit" disabled={protocolMutation.isPending || !protocolAssets}>
                       <ScanSearch className="size-4" />
                       {protocolMutation.isPending
                         ? "分析中..."
                         : "开始协议规范提取"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      disabled={!protocolMutation.isPending || !operationIds.protocol || cancelRequestedTabs.protocol || isCancellingOperation(operationIds.protocol)}
+                      onClick={() => requestStop("protocol", operationIds.protocol)}
+                    >
+                      <Square className="size-4" />
+                      {cancelRequestedTabs.protocol || isCancellingOperation(operationIds.protocol) ? "停止中..." : "停止"}
                     </Button>
                   </div>
                 </form>
@@ -1125,7 +1296,7 @@ export function OfflineStudioView(): JSX.Element {
               <Card className="flex h-full min-h-0 flex-col overflow-hidden">
                 <CardHeader className="shrink-0">
                   <CardTitle>协议提取结果</CardTitle>
-                  <CardDescription>上方显示当前动作回显，仅捕获协议规范提取最近一次后端操作；结构化结果预览保留在下方。</CardDescription>
+                  <CardDescription>实时的后端动作和分析结果预览</CardDescription>
                 </CardHeader>
                 <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
                   <div className="h-[24vh] min-h-[18vh] max-h-[30vh] shrink-0">
@@ -1137,27 +1308,13 @@ export function OfflineStudioView(): JSX.Element {
                       pollIntervalMs={1000}
                       variant="compact"
                       eagerStart={false}
-                      note="仅捕获协议规范提取最近一次后端操作回显。"
+                      note={cancelRequestedTabs.protocol ? "已发送停止请求，当前已写出的规范文件会保留" : "捕获最近一次后端动作回显"}
                       className="h-full min-h-0"
                       logClassName="bg-background/45"
                     />
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
-                    <JsonViewer
-                      data={
-                        protocolMutation.data
-                          ? {
-                              ...protocolMutation.data,
-                              frontend_reference: {
-                                primaryPath: protocolPrimaryPathFromResponse(protocolMutation.data),
-                                modelSpecRef: protocolAssets?.specFileRef ?? null,
-                                relatedPaths: protocolRelatedPathsFromResponse(protocolMutation.data),
-                              },
-                            }
-                          : { status: "idle" }
-                      }
-                      compact
-                    />
+                    <JsonViewer data={protocolPreviewData} compact />
                   </div>
                 </CardContent>
               </Card>
@@ -1277,10 +1434,19 @@ export function OfflineStudioView(): JSX.Element {
                       />
                     </div>
                   </div>
-                  <div className="md:col-span-2">
+                  <div className="md:col-span-2 flex flex-wrap gap-3">
                     <Button type="submit" disabled={seedsMutation.isPending}>
                       <Wand2 className="size-4" />
                       {seedsMutation.isPending ? "生成中..." : "生成初始种子"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      disabled={!seedsMutation.isPending || !operationIds.seeds || cancelRequestedTabs.seeds || isCancellingOperation(operationIds.seeds)}
+                      onClick={() => requestStop("seeds", operationIds.seeds)}
+                    >
+                      <Square className="size-4" />
+                      {cancelRequestedTabs.seeds || isCancellingOperation(operationIds.seeds) ? "停止中..." : "停止"}
                     </Button>
                   </div>
                 </form>
@@ -1290,7 +1456,7 @@ export function OfflineStudioView(): JSX.Element {
               <Card className="flex h-full min-h-0 flex-col overflow-hidden">
                 <CardHeader className="shrink-0">
                   <CardTitle>种子生成结果</CardTitle>
-                  <CardDescription>上方显示当前动作回显，仅捕获初始种子生成最近一次后端操作；结构化结果预览保留在下方。</CardDescription>
+                  <CardDescription>实时后端阶段动作与结构化列表预览</CardDescription>
                 </CardHeader>
                 <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
                   <div className="h-[24vh] min-h-[18vh] max-h-[30vh] shrink-0">
@@ -1302,13 +1468,29 @@ export function OfflineStudioView(): JSX.Element {
                       pollIntervalMs={1000}
                       variant="compact"
                       eagerStart={false}
-                      note="仅捕获初始种子生成最近一次后端操作回显。"
+                      note={cancelRequestedTabs.seeds ? "已发送停止请求，当前已生成的种子文件会保留" : "捕获最近一次后端操作回显"}
                       className="h-full min-h-0"
                       logClassName="bg-background/45"
                     />
                   </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
-                    <JsonViewer data={seedsMutation.data ?? { status: "idle" }} compact />
+                  <div className="console-scrollbar min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
+                    {liveSeedItems.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-border/70 bg-background/35 px-4 py-6 text-sm text-muted-foreground">
+                        当前还没有已写出的种子文件。
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {liveSeedItems.map((item) => (
+                          <div key={item.workspace_ref ?? item.virtual_path} className="rounded-2xl border border-border/60 bg-background/60 px-4 py-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="min-w-0 truncate text-sm font-medium text-foreground">{item.name}</p>
+                              <Badge variant="outline">{formatFileSize(item.size)}</Badge>
+                            </div>
+                            <p className="mt-2 break-all font-mono text-xs text-muted-foreground">{item.virtual_path}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -1396,7 +1578,7 @@ export function OfflineStudioView(): JSX.Element {
                       <div className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3"><div className="min-w-0"><p className="text-sm font-medium">use_static_prefilter</p><p className="text-xs text-muted-foreground">先用静态预筛降低 LLM 压力</p></div><Switch className="shrink-0" checked={riskAnalyzeForm.watch("use_static_prefilter")} onCheckedChange={(checked) => riskAnalyzeForm.setValue("use_static_prefilter", checked)} /></div>
                     </div>
                   </details>
-                  <div className="md:col-span-2">
+                  <div className="md:col-span-2 flex flex-wrap gap-3">
                     <Button
                       type="submit"
                       disabled={riskAnalyzeMutation.isPending || !riskAnalyzeAssets}
@@ -1406,29 +1588,46 @@ export function OfflineStudioView(): JSX.Element {
                         ? "分析中..."
                         : "运行风险路径分析"}
                     </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      disabled={!riskAnalyzeMutation.isPending || !operationIds["risk-analyze"] || cancelRequestedTabs["risk-analyze"] || isCancellingOperation(operationIds["risk-analyze"])}
+                      onClick={() => requestStop("risk-analyze", operationIds["risk-analyze"])}
+                    >
+                      <Square className="size-4" />
+                      {cancelRequestedTabs["risk-analyze"] || isCancellingOperation(operationIds["risk-analyze"]) ? "停止中..." : "停止"}
+                    </Button>
                   </div>
                 </form>
               </CardContent>
             </Card>
-            <div className="grid min-h-[400px] min-w-0 grid-rows-[minmax(0,1fr)_200px] gap-4">
+            <div className="flex min-h-[400px] min-w-0 flex-col gap-4">
+              <div className="h-[24vh] min-h-[18vh] max-h-[30vh] shrink-0">
+                <OperationLogPanel
+                  operationId={operationIds["risk-analyze"]}
+                  running={riskAnalyzeMutation.isPending}
+                  title="当前动作"
+                  maxLines={120}
+                  pollIntervalMs={1000}
+                  variant="compact"
+                  eagerStart={false}
+                  note={cancelRequestedTabs["risk-analyze"] ? "已发送停止请求，当前已写出的分析结果会保留" : "仅捕获风险路径分析最近一次后端操作回显。"}
+                  className="h-full min-h-0"
+                  logClassName="bg-background/45"
+                />
+              </div>
 
-              <Card className="flex min-h-0 flex-col overflow-hidden">
+              <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <CardHeader className="shrink-0">
                   <CardTitle>分析结果</CardTitle>
-                  <CardDescription>结构化键值对渲染 pipeline 的 summary / findings / failed_chunks / warnings。</CardDescription>
+                  <CardDescription>下方显示 pipeline 的 summary / findings / failed_chunks / warnings。</CardDescription>
                 </CardHeader>
                 <CardContent className="flex min-h-0 flex-1 flex-col">
                   <div className="console-scrollbar min-h-0 flex-1 overflow-y-auto rounded-xl border border-border/60 bg-card/70 p-4">
-                    <RiskAnalysisSummary data={riskAnalyzeMutation.data ?? null} />
+                    <RiskAnalysisSummary data={liveRiskAnalyzeData ?? riskAnalyzeMutation.data ?? null} />
                   </div>
                 </CardContent>
               </Card>
-
-              {riskAnalyzeMutation.isPending && (
-                <div className="rounded-lg border border-[hsl(var(--accent-blue)/0.2)] bg-[hsl(var(--accent-blue)/0.05)] px-3 py-2 text-xs text-[hsl(var(--accent-blue))]">
-                  分析执行中，请查看底部日志栏...
-                </div>
-              )}
             </div>
           </div>
         </TabsContent>
@@ -1439,7 +1638,7 @@ export function OfflineStudioView(): JSX.Element {
             <Card className="flex min-h-[30rem] flex-col overflow-hidden">
               <CardHeader className="border-b border-border/50">
                 <CardTitle>风险结果预览</CardTitle>
-                <CardDescription>读取风险分析输出，并在下方显示当前动作回显。</CardDescription>
+                <CardDescription>读取风险分析输出文件预览详细结果</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 overflow-y-auto p-5">
                 <form
@@ -1526,7 +1725,7 @@ export function OfflineStudioView(): JSX.Element {
                     <FileJson className="size-4 text-primary" />
                     预览主体
                   </CardTitle>
-                  <CardDescription>主结果优先展示 preview 文本与路径信息。</CardDescription>
+                  <CardDescription>展示预览文本与路径信息</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 p-5">
                   <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
@@ -1536,7 +1735,7 @@ export function OfflineStudioView(): JSX.Element {
                   <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">preview</p>
                     <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
-                      {previewData?.preview?.trim() || "暂无预览文本。"}
+                      {previewData?.preview?.trim() || "暂无预览文本"}
                     </pre>
                   </div>
                 </CardContent>
@@ -1550,12 +1749,12 @@ export function OfflineStudioView(): JSX.Element {
                     <Search className="size-4 text-primary" />
                     Findings 摘要
                   </CardTitle>
-                  <CardDescription>详情折到右侧，保持中间主结果突出。</CardDescription>
+                  <CardDescription>字段详情</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 p-5">
                   {previewFindings.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-border/70 bg-background/35 px-4 py-6 text-sm text-muted-foreground">
-                      当前预览没有 findings。
+                      当前预览没有 findings
                     </div>
                   ) : (
                     previewFindings.slice(0, 6).map((finding, index) => (
@@ -1589,16 +1788,16 @@ export function OfflineStudioView(): JSX.Element {
           <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
             <Card className="flex min-h-[400px] flex-1 flex-col overflow-hidden">
               <CardHeader>
-                <CardTitle>风险JSON上传</CardTitle>
+                <CardTitle>风险分析结果JSON上传</CardTitle>
                 <CardDescription>
-                  单一风险路径文件上传，利用已有结果
+                  单一外部风险路径结果文件上传
                 </CardDescription>
               </CardHeader>
               <CardContent className="min-h-0 flex-1 overflow-y-auto">
                 <div className="space-y-4">
                   <FormField
                     label="协议名 protocol"
-                    description="必须完全匹配已有协议资产；上传结果将写入该协议预设风险分析位置。"
+                    description="匹配已有协议资产 | 上传结果将写入该协议预设风险分析位置"
                   >
                     <ProtocolComboInput
                       value={riskUploadProtocol}
@@ -1614,7 +1813,7 @@ export function OfflineStudioView(): JSX.Element {
 
                   <FixedPathField
                     label="目标分析文件"
-                    description="上传结果将镜像到风险分析预设文件。"
+                    description="上传结果将镜像到风险分析预设文件"
                     value={riskUploadAssets?.riskAnalysisDisplay ?? "选择协议后自动生成"}
                   />
 
@@ -1634,7 +1833,7 @@ export function OfflineStudioView(): JSX.Element {
 
                         if (!protocol) {
                           setRiskUploadRunning(false);
-                          setUploadError(new Error("请选择已有协议资产名后再上传风险结果。"));
+                          setUploadError(new Error("请选择已有协议资产名后再上传风险结果"));
                           return;
                         }
 
@@ -1680,7 +1879,7 @@ export function OfflineStudioView(): JSX.Element {
                     />
                   </FormField>
                   <div className="rounded-xl border border-border/60 bg-background/50 p-4 text-sm text-muted-foreground">
-                    上传后的风险结果会被保存到兼容目录，并镜像为默认风险结果文件名。
+                    上传后的风险结果会被保存到兼容目录，并镜像为默认风险结果文件名
                   </div>
                 </div>
               </CardContent>
@@ -1689,7 +1888,7 @@ export function OfflineStudioView(): JSX.Element {
               <CardHeader>
                 <CardTitle>最近结果</CardTitle>
                 <CardDescription>
-                  适合接收外部生成的 final_analysis.json。
+                  接收外部输入生成的 final_analysis.json
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1705,7 +1904,7 @@ export function OfflineStudioView(): JSX.Element {
             <Card className="flex min-h-[30rem] flex-col overflow-hidden">
               <CardHeader className="border-b border-border/50">
                 <CardTitle>插桩处理</CardTitle>
-                <CardDescription>参数在左，主插桩报告在中间，详情折叠到右侧。</CardDescription>
+                <CardDescription>接收参数启动插桩任务</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 overflow-y-auto p-5">
                 <form
@@ -1733,7 +1932,7 @@ export function OfflineStudioView(): JSX.Element {
                 >
                   <FormField
                     label="协议 protocol"
-                    description="必须完全匹配已有协议资产，插桩输入输出路径按协议资产模型自动绑定。"
+                    description="匹配已有协议资产 | 路径按协议资产模型自动绑定"
                   >
                     <ProtocolComboInput
                       value={instrumentForm.watch("protocol")}
@@ -1758,17 +1957,17 @@ export function OfflineStudioView(): JSX.Element {
                   </FormField>
                   <FixedPathField
                     label="source_ref"
-                    description="固定引用协议资产模型中的 source/ 目录。"
+                    description="固定引用协议资产模型中的 source/ 目录"
                     value={instrumentAssets?.sourceDisplay ?? "选择协议后自动生成"}
                   />
                   <FixedPathField
                     label="analysis_ref"
-                    description="固定读取 risk/analyses/final_analysis.json。"
+                    description="固定读取 risk/analyses/final_analysis.json"
                     value={instrumentAssets?.riskAnalysisDisplay ?? "选择协议后自动生成"}
                   />
                   <FixedPathField
                     label="output_ref"
-                    description="固定输出到 risk/instrumented/。"
+                    description="固定输出到 risk/instrumented/"
                     value={instrumentAssets?.instrumentedOutputDisplay ?? "选择协议后自动生成"}
                   />
 
@@ -1776,7 +1975,7 @@ export function OfflineStudioView(): JSX.Element {
                     <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/45 px-4 py-3">
                       <div>
                         <p className="text-sm font-medium">原地写回</p>
-                        <p className="text-xs text-muted-foreground">直接覆盖原源码，通常不建议。</p>
+                        <p className="text-xs text-muted-foreground">直接覆盖原源码，通常不建议</p>
                       </div>
                       <Switch
                         checked={instrumentForm.watch("in_place")}
@@ -1786,7 +1985,7 @@ export function OfflineStudioView(): JSX.Element {
                     <div className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/45 px-4 py-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium">compile_check</p>
-                        <p className="text-xs text-muted-foreground">要求后端执行编译校验并返回 compile_check 结果。</p>
+                        <p className="text-xs text-muted-foreground">要求后端执行编译校验并返回 compile_check 结果</p>
                       </div>
                       <Switch
                         className="shrink-0"
@@ -1797,7 +1996,7 @@ export function OfflineStudioView(): JSX.Element {
                     <div className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/45 px-4 py-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium">strict_ast_validation</p>
-                        <p className="text-xs text-muted-foreground">拒绝全局区、宏区、函数边界等不安全插桩点。</p>
+                        <p className="text-xs text-muted-foreground">拒绝全局区、宏区、函数边界等不安全插桩点</p>
                       </div>
                       <Switch
                         className="shrink-0"
@@ -1821,7 +2020,7 @@ export function OfflineStudioView(): JSX.Element {
                     pollIntervalMs={1000}
                     variant="compact"
                     eagerStart={false}
-                    note="仅捕获插桩处理最近一次后端操作回显。"
+                    note="捕获最近一次后端操作回显"
                     className="h-full min-h-0"
                     logClassName="bg-background/45"
                   />
@@ -1832,7 +2031,7 @@ export function OfflineStudioView(): JSX.Element {
             <Card className="overflow-hidden">
               <CardHeader className="border-b border-border/50">
                 <CardTitle>插桩主结果</CardTitle>
-                <CardDescription>中间主栏显示结构化结果和 compile_check 摘要。</CardDescription>
+                <CardDescription>结构化结果和 compile_check 摘要</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 p-5">
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1871,7 +2070,7 @@ export function OfflineStudioView(): JSX.Element {
               <Card className="overflow-hidden">
                 <CardHeader className="border-b border-border/50">
                   <CardTitle>插桩详情</CardTitle>
-                  <CardDescription>将大体量详情折叠到右侧，不影响主结果阅读。</CardDescription>
+                  <CardDescription>详情字段渲染</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 p-5">
                   <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
@@ -2026,7 +2225,7 @@ export function OfflineStudioView(): JSX.Element {
                       pollIntervalMs={1000}
                       variant="compact"
                       eagerStart={false}
-                      note="仅捕获漏洞文档上传与蒸馏最近一次后端操作回显。"
+                      note="捕获最近一次后端操作回显"
                       className="h-full min-h-0"
                       logClassName="bg-background/45"
                     />
@@ -2288,7 +2487,7 @@ export function OfflineStudioView(): JSX.Element {
             <Card className="overflow-hidden">
               <CardHeader>
                 <CardTitle>构建 Fuzz 目标</CardTitle>
-                <CardDescription>BuildPlan 由后端生成并保存，BuildRun 只能执行已保存的计划。</CardDescription>
+                <CardDescription>BuildPlan / BuildRun 模块分别负责生成 / 执行计划</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <form
@@ -2312,7 +2511,7 @@ export function OfflineStudioView(): JSX.Element {
                     });
                   })}
                 >
-                  <FormField label="协议名" description="必须完全匹配已有协议资产，构建输入引用按资产模型自动绑定。">
+                  <FormField label="协议名" description="匹配已有协议资产 | 引用按资产模型自动绑定">
                     <ProtocolComboInput
                       value={buildPlanForm.watch("protocol")}
                       options={protocolOptions}
@@ -2344,8 +2543,8 @@ export function OfflineStudioView(): JSX.Element {
                       <Input {...buildPlanForm.register("instrumentation_mode")} placeholder="llvm" />
                     </FormField>
                   </div>
-                  <FixedPathField label="input_ref" description="固定引用种子目录 seeds/bin/。" value={buildAssets?.buildInputDisplay ?? "选择协议后自动生成"} />
-                  <FixedPathField label="dict_ref" description="固定引用协议字典 dicts/auto.dict。" value={buildAssets?.dictDisplay ?? "选择协议后自动生成"} />
+                  <FixedPathField label="input_ref" description="固定引用种子目录 seeds/bin/" value={buildAssets?.buildInputDisplay ?? "选择协议后自动生成"} />
+                  <FixedPathField label="dict_ref" description="固定引用协议字典 dicts/auto.dict" value={buildAssets?.dictDisplay ?? "选择协议后自动生成"} />
                   <div className="flex flex-wrap gap-3">
                     <Button type="submit" disabled={buildPlanMutation.isPending || !buildAssets}>
                       <Wand2 className="size-4" />
@@ -2378,7 +2577,7 @@ export function OfflineStudioView(): JSX.Element {
                     pollIntervalMs={1000}
                     variant="compact"
                     eagerStart={false}
-                    note="仅捕获 BuildPlan 生成、BuildRun 执行与 LaunchProfile 预测最近一次后端操作回显。"
+                    note="BuildPlan 生成、BuildRun 执行与 LaunchProfile 预测最近一次后端操作回显"
                     className="h-full min-h-0"
                     logClassName="bg-background/45"
                   />
@@ -2396,7 +2595,7 @@ export function OfflineStudioView(): JSX.Element {
               <Card className="overflow-hidden">
                 <CardHeader>
                   <CardTitle>Probe / BuildPlan 预览</CardTitle>
-                  <CardDescription>查看源目录探测结果、编译器选择和最新构建计划。</CardDescription>
+                  <CardDescription>查看源目录探测结果、编译器选择和最新构建计划</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4 lg:grid-cols-2">
                   <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
@@ -2411,7 +2610,7 @@ export function OfflineStudioView(): JSX.Element {
               <Card className="overflow-hidden">
                 <CardHeader>
                   <CardTitle>BuildRun Targets / LaunchProfiles</CardTitle>
-                  <CardDescription>从 BuildRun target 生成 LaunchProfile，并传递到任务创建页使用。</CardDescription>
+                  <CardDescription>从 BuildRun target 生成 LaunchProfile，并传递到任务创建页使用</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Table>

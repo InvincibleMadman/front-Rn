@@ -42,6 +42,7 @@ const offlineChildren = [
   { label: "结果预览", tab: "risk-preview" },
   { label: "风险上传", tab: "risk-upload" },
   { label: "插桩处理", tab: "instrument" },
+  { label: "构建 Fuzz 目标", tab: "build-fuzz" },
 ] as const;
 
 const SIDEBAR_PRIMARY_NAV_BUTTON_CLASS =

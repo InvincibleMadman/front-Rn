@@ -21,5 +21,13 @@ export const operationsApi = {
     const response = await apiClient.requestEnvelope<OperationLogTail>(`/api/v1/operations/${encodeURIComponent(operationId)}/logs/tail?${params.toString()}`);
     return response.data;
   },
+  cancelOperation: async (operationId: string, reason?: string): Promise<OperationRecord> => {
+    const response = await apiClient.requestEnvelope<OperationRecord>(`/api/v1/operations/${encodeURIComponent(operationId)}/cancel`, {
+      method: "POST",
+      body: JSON.stringify(reason ? { reason } : {}),
+      operationId,
+    });
+    return response.data;
+  },
   logsWsUrl: (operationId: string): string => resolveWsUrl(`/api/v1/operations/${encodeURIComponent(operationId)}/logs/ws`),
 };

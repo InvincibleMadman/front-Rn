@@ -10,6 +10,8 @@ export function StatusBadge({ status }: { status: string | JobStatus }): JSX.Ele
         ? "danger"
         : status === "stopping"
           ? "warning"
+          : status === "cancelled" || status === "partial"
+            ? "warning"
           : status === "finished"
             ? "secondary"
             : status === "crash"

@@ -161,8 +161,8 @@ export function OperationLogPanel({
   }, [items.length, clearCycles]);
 
   const helperText = useMemo(() => {
-    if (!operationId) return "尚未开始。启动任务后这里会显示后端阶段输出。";
-    if (failures > 5) return "日志轮询连续失败超过 5 次，已停止自动重试。";
+    if (!operationId) return "尚未开始 | 启动任务后这里会显示后端阶段输出";
+    if (failures > 5) return "日志轮询连续失败超过 5 次，已停止自动重试";
     if (clearCycles > 0) return `已自动清屏 ${clearCycles} 次`;
     return null;
   }, [clearCycles, failures, operationId]);
