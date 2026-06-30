@@ -67,10 +67,10 @@ export function InstrumentationReportView({ data }: { data?: InstrumentResponse 
       ) : null}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard title="inserted_markers" value={value(data.inserted_markers)} hint="后端报告插入数量" statusColor="primary" />
-        <SummaryCard title="instrumented_files" value={String(instrumentedFiles.length)} hint="已修改文件数" statusColor="success" />
-        <SummaryCard title="applied_insertions" value={String(applied.length)} hint="安全应用的插桩点" statusColor="success" />
-        <SummaryCard title="rejected_insertions" value={String(rejected.length)} hint="安全拒绝的插桩点" statusColor={rejected.length ? "warning" : "primary"} />
+        <SummaryCard title="inserted_markers" value={value(data.inserted_markers)} hint="后端报告插入数量" statusColor="indigo" />
+        <SummaryCard title="instrumented_files" value={String(instrumentedFiles.length)} hint="已修改文件数" statusColor="teal" />
+        <SummaryCard title="applied_insertions" value={String(applied.length)} hint="安全应用的插桩点" statusColor="emerald" />
+        <SummaryCard title="rejected_insertions" value={String(rejected.length)} hint="安全拒绝的插桩点" statusColor={rejected.length ? "orange" : "gold"} />
       </div>
 
       <div className="grid gap-3 text-sm md:grid-cols-2">

@@ -509,6 +509,176 @@
       linear-gradient(180deg, hsl(266 32% 22%) 0%, hsl(255 28% 16%) 100%);
   }
 
+  /* Distinct summary-card tones for dashboard subpages. */
+  .summary-card-sky {
+    color: hsl(200 92% 44%);
+    background:
+      radial-gradient(circle at 82% 14%, hsl(200 92% 44% / 0.16), transparent 30%),
+      linear-gradient(180deg, hsl(198 100% 99%) 0%, hsl(200 92% 95%) 100%);
+  }
+
+  .dark .summary-card-sky {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(200 92% 68% / 0.26), transparent 30%),
+      linear-gradient(180deg, hsl(204 54% 22%) 0%, hsl(208 42% 16%) 100%);
+  }
+
+  .summary-card-cyan {
+    color: hsl(188 92% 40%);
+    background:
+      radial-gradient(circle at 82% 14%, hsl(188 92% 40% / 0.16), transparent 30%),
+      linear-gradient(180deg, hsl(190 100% 99%) 0%, hsl(191 82% 94%) 100%);
+  }
+
+  .dark .summary-card-cyan {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(188 92% 64% / 0.26), transparent 30%),
+      linear-gradient(180deg, hsl(190 52% 22%) 0%, hsl(191 42% 16%) 100%);
+  }
+
+  .summary-card-teal {
+    color: hsl(173 70% 35%);
+    background:
+      radial-gradient(circle at 82% 14%, hsl(173 70% 35% / 0.16), transparent 30%),
+      linear-gradient(180deg, hsl(168 100% 99%) 0%, hsl(169 55% 94%) 100%);
+  }
+
+  .dark .summary-card-teal {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(173 72% 52% / 0.24), transparent 30%),
+      linear-gradient(180deg, hsl(173 42% 22%) 0%, hsl(174 36% 16%) 100%);
+  }
+
+  .summary-card-indigo {
+    color: hsl(243 75% 59%);
+    background:
+      radial-gradient(circle at 82% 14%, hsl(243 75% 59% / 0.16), transparent 30%),
+      linear-gradient(180deg, hsl(246 100% 99%) 0%, hsl(244 84% 95%) 100%);
+  }
+
+  .dark .summary-card-indigo {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(243 88% 74% / 0.28), transparent 30%),
+      linear-gradient(180deg, hsl(245 42% 24%) 0%, hsl(244 34% 17%) 100%);
+  }
+
+  .summary-card-lime {
+    color: hsl(84 70% 40%);
+    background:
+      radial-gradient(circle at 82% 14%, hsl(84 70% 40% / 0.16), transparent 30%),
+      linear-gradient(180deg, hsl(84 100% 99%) 0%, hsl(84 76% 94%) 100%);
+  }
+
+  .dark .summary-card-lime {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(84 72% 60% / 0.24), transparent 30%),
+      linear-gradient(180deg, hsl(84 38% 24%) 0%, hsl(82 30% 17%) 100%);
+  }
+
+  .summary-card-amber {
+    color: hsl(38 92% 50%);
+    background:
+      radial-gradient(circle at 82% 14%, hsl(38 92% 50% / 0.16), transparent 30%),
+      linear-gradient(180deg, hsl(48 100% 99%) 0%, hsl(43 100% 94%) 100%);
+  }
+
+  .dark .summary-card-amber {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(39 92% 64% / 0.26), transparent 30%),
+      linear-gradient(180deg, hsl(39 44% 23%) 0%, hsl(34 38% 16%) 100%);
+  }
+
+  .summary-card-gold {
+    color: hsl(46 90% 46%);
+    background:
+      radial-gradient(circle at 82% 14%, hsl(46 90% 46% / 0.16), transparent 30%),
+      linear-gradient(180deg, hsl(51 100% 99%) 0%, hsl(48 90% 94%) 100%);
+  }
+
+  .dark .summary-card-gold {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(46 90% 66% / 0.26), transparent 30%),
+      linear-gradient(180deg, hsl(44 44% 24%) 0%, hsl(39 38% 17%) 100%);
+  }
+
+  .summary-card-orange {
+    color: hsl(var(--accent-orange));
+    background:
+      radial-gradient(circle at 82% 14%, hsl(var(--accent-orange) / 0.18), transparent 30%),
+      linear-gradient(180deg, hsl(28 100% 99%) 0%, hsl(28 100% 94%) 100%);
+  }
+
+  .dark .summary-card-orange {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(var(--accent-orange) / 0.28), transparent 30%),
+      linear-gradient(180deg, hsl(28 48% 23%) 0%, hsl(22 36% 16%) 100%);
+  }
+
+  .summary-card-coral {
+    color: hsl(12 83% 60%);
+    background:
+      radial-gradient(circle at 82% 14%, hsl(12 83% 60% / 0.16), transparent 30%),
+      linear-gradient(180deg, hsl(16 100% 99%) 0%, hsl(13 92% 94%) 100%);
+  }
+
+  .dark .summary-card-coral {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(12 88% 72% / 0.26), transparent 30%),
+      linear-gradient(180deg, hsl(13 42% 24%) 0%, hsl(10 36% 17%) 100%);
+  }
+
+  .summary-card-brown {
+    color: hsl(25 55% 39%);
+    background:
+      radial-gradient(circle at 82% 14%, hsl(25 55% 39% / 0.16), transparent 30%),
+      linear-gradient(180deg, hsl(35 67% 99%) 0%, hsl(29 44% 93%) 100%);
+  }
+
+  .dark .summary-card-brown {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(27 54% 60% / 0.22), transparent 30%),
+      linear-gradient(180deg, hsl(25 32% 24%) 0%, hsl(23 26% 17%) 100%);
+  }
+
+  .summary-card-rose {
+    color: hsl(341 78% 57%);
+    background:
+      radial-gradient(circle at 82% 14%, hsl(341 78% 57% / 0.16), transparent 30%),
+      linear-gradient(180deg, hsl(340 100% 99%) 0%, hsl(341 86% 95%) 100%);
+  }
+
+  .dark .summary-card-rose {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(341 84% 72% / 0.26), transparent 30%),
+      linear-gradient(180deg, hsl(339 36% 24%) 0%, hsl(336 30% 17%) 100%);
+  }
+
+  .summary-card-violet {
+    color: hsl(271 76% 58%);
+    background:
+      radial-gradient(circle at 82% 14%, hsl(271 76% 58% / 0.16), transparent 30%),
+      linear-gradient(180deg, hsl(278 100% 99%) 0%, hsl(272 84% 95%) 100%);
+  }
+
+  .dark .summary-card-violet {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(272 88% 76% / 0.28), transparent 30%),
+      linear-gradient(180deg, hsl(268 38% 24%) 0%, hsl(260 30% 17%) 100%);
+  }
+
+  .summary-card-slate {
+    color: hsl(215 17% 42%);
+    background:
+      radial-gradient(circle at 82% 14%, hsl(215 17% 42% / 0.16), transparent 30%),
+      linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(215 24% 94%) 100%);
+  }
+
+  .dark .summary-card-slate {
+    background:
+      radial-gradient(circle at 82% 14%, hsl(215 20% 72% / 0.2), transparent 30%),
+      linear-gradient(180deg, hsl(218 18% 24%) 0%, hsl(220 18% 16%) 100%);
+  }
+
   .console-data-card {
     @apply rounded-[var(--radius-xl)] border;
     background: hsl(var(--bg-surface) / 0.8);

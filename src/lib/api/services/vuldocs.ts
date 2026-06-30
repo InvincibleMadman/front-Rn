@@ -13,7 +13,7 @@ export const vuldocsApi = {
     });
     return response.data;
   },
-  distill: async (protocol: string, body: { operation_id?: string; doc_ids?: string[]; use_llm?: boolean }): Promise<VulDocDistillResponse> => {
+  distill: async (protocol: string, body: { operation_id?: string; doc_ids?: string[] }): Promise<VulDocDistillResponse> => {
     const response = await apiClient.requestEnvelope<VulDocDistillResponse>(`/api/v1/protocols/${encodeURIComponent(protocol)}/vuldocs/distill`, {
       method: "POST",
       body: JSON.stringify(body),

@@ -13,7 +13,6 @@ export interface ProtocolAnalyzeRequest extends WithOperationId {
   name?: string;
   content?: string;
   spec?: string;
-  use_llm?: boolean;
 }
 
 export interface ProtocolSpecField {
@@ -100,7 +99,6 @@ export interface RiskAnalyzeRequest extends WithOperationId {
   max_workers?: number;
   llm_concurrency?: number;
   chunk_strategy?: RiskChunkStrategy;
-  use_llm?: boolean;
   use_static_prefilter?: boolean;
   timeout_sec?: number;
 }

@@ -97,7 +97,7 @@ export function SettingsHeroBoard({
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {signalPanels.map((panel) => (
-            <div key={panel.id} className="settings-hero-panel">
+            <div key={panel.id} className="settings-hero-panel font-sans">
               <div className="space-y-4">
                 <div className="space-y-2">
                   <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{panel.eyebrow}</p>
@@ -125,7 +125,7 @@ export function SettingsHeroBoard({
                       <span
                         className={[
                           "text-right text-sm font-medium",
-                          item.mono ? "break-all font-mono text-[12px]" : "",
+                          item.mono ? "break-all text-[12px]" : "",
                           item.tone === "success"
                             ? "text-success"
                             : item.tone === "warning"

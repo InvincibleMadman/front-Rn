@@ -20,12 +20,13 @@ export const buildAssistantApi = {
     return response.data;
   },
 
-  async createPlan(protocol: string, payload: BuildPlanCreatePayload | Record<string, unknown>): Promise<BuildPlan> {
+  async createPlan(protocol: string, payload: BuildPlanCreatePayload | Record<string, unknown>, operationId?: string): Promise<BuildPlan> {
     const response = await apiClient.requestEnvelope<BuildPlan>(nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/build/plans`), {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders(),
       body: JSON.stringify(payload),
+      operationId,
     });
     return response.data;
   },
@@ -47,12 +48,13 @@ export const buildAssistantApi = {
     return response.data;
   },
 
-  async runPlan(protocol: string, planId: string): Promise<BuildRun> {
+  async runPlan(protocol: string, planId: string, operationId?: string): Promise<BuildRun> {
     const response = await apiClient.requestEnvelope<BuildRun>(nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/build/plans/${encodeURIComponent(planId)}/run`), {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders(),
       body: JSON.stringify({}),
+      operationId,
     });
     return response.data;
   },
@@ -78,12 +80,13 @@ export const buildAssistantApi = {
     return response.data.items ?? [];
   },
 
-  async predictLaunchProfile(protocol: string, payload: Record<string, unknown>): Promise<LaunchProfile> {
+  async predictLaunchProfile(protocol: string, payload: Record<string, unknown>, operationId?: string): Promise<LaunchProfile> {
     const response = await apiClient.requestEnvelope<LaunchProfile>(nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/fuzz/launch-profiles/predict`), {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders(),
       body: JSON.stringify(payload),
+      operationId,
     });
     return response.data;
   },

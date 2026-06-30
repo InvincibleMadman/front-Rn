@@ -106,7 +106,6 @@ export interface BuildPlan {
   instrumentation_mode: string;
   sanitizer_mode?: string;
   build_system?: string;
-  use_llm: boolean;
   server_generated: true;
   created_by: string;
   created_at: string;

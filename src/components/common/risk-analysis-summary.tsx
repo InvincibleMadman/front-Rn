@@ -46,14 +46,14 @@ export function RiskAnalysisSummary({ data }: { data?: RiskAnalyzeResponse | nul
   return (
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard title="total_files" value={value(summary.total_files)} hint="扫描文件总数" statusColor="primary" />
-        <SummaryCard title="selected_files" value={value(summary.selected_files)} hint="静态预筛后文件" statusColor="primary" />
-        <SummaryCard title="total_chunks" value={value(summary.total_chunks)} hint="函数/文件切片数" statusColor="warning" />
-        <SummaryCard title="completed_chunks" value={value(summary.completed_chunks)} hint={`失败 ${summary.failed_chunks ?? failedChunks.length}`} statusColor="success" />
-        <SummaryCard title="failed_chunks" value={value(summary.failed_chunks ?? failedChunks.length)} hint="可展开查看失败原因" statusColor={(summary.failed_chunks ?? failedChunks.length) > 0 ? "danger" : "primary"} />
-        <SummaryCard title="cache_hits" value={value(summary.cache_hits)} hint="LLM/静态分析缓存命中" statusColor="primary" />
-        <SummaryCard title="total_findings" value={value(summary.total_findings ?? findings.length)} hint="风险发现数量" statusColor="warning" />
-        <SummaryCard title="duration_ms" value={duration(summary.duration_ms)} hint={value(summary.duration_ms)} statusColor="primary" />
+        <SummaryCard title="total_files" value={value(summary.total_files)} hint="扫描文件总数" statusColor="blue" />
+        <SummaryCard title="selected_files" value={value(summary.selected_files)} hint="静态预筛后文件" statusColor="cyan" />
+        <SummaryCard title="total_chunks" value={value(summary.total_chunks)} hint="函数/文件切片数" statusColor="amber" />
+        <SummaryCard title="completed_chunks" value={value(summary.completed_chunks)} hint={`失败 ${summary.failed_chunks ?? failedChunks.length}`} statusColor="emerald" />
+        <SummaryCard title="failed_chunks" value={value(summary.failed_chunks ?? failedChunks.length)} hint="可展开查看失败原因" statusColor="rose" />
+        <SummaryCard title="cache_hits" value={value(summary.cache_hits)} hint="LLM/静态分析缓存命中" statusColor="indigo" />
+        <SummaryCard title="total_findings" value={value(summary.total_findings ?? findings.length)} hint="风险发现数量" statusColor="orange" />
+        <SummaryCard title="duration_ms" value={duration(summary.duration_ms)} hint={value(summary.duration_ms)} statusColor="slate" />
       </div>
 
       {warnings.length ? (

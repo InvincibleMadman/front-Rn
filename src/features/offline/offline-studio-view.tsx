@@ -29,6 +29,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { JsonViewer } from "@/components/common/json-viewer";
+import { OperationLogPanel } from "@/components/common/operation-log-panel";
 import { RiskAnalysisSummary } from "@/components/common/risk-analysis-summary";
 import { InstrumentationReportView } from "@/components/common/instrumentation-report-view";
 import { ApiErrorReporter } from "@/components/common/api-error-alert";
@@ -76,7 +77,6 @@ const FIXED_DICT_FILENAME = "auto.dict";
 const protocolSchema = z.object({
   protocol: z.string().min(1, "必填"),
   content: z.string().optional(),
-  use_llm: z.boolean().default(true),
 });
 
 const seedsSchema = z.object({
@@ -92,7 +92,6 @@ const riskAnalyzeSchema = z.object({
   max_workers: z.coerce.number().int().positive().default(4),
   llm_concurrency: z.coerce.number().int().positive().default(2),
   timeout_sec: z.coerce.number().int().positive().default(1800),
-  use_llm: z.boolean().default(true),
   use_static_prefilter: z.boolean().default(true),
   chunk_strategy: z.string().default("function"),
 });
@@ -112,7 +111,6 @@ const buildPlanSchema = z.object({
   protocol: z.string().min(1, "必填"),
   compiler: z.string().default("afl-clang-fast"),
   instrumentation_mode: z.string().default("llvm"),
-  use_llm: z.boolean().default(false),
 });
 
 const offlineTabOptions = [
@@ -298,6 +296,30 @@ function previewRawSummary(data?: RiskPreviewResponse | null): Record<string, un
   };
 }
 
+function previewStatusLabel(status: unknown): string {
+  const raw = typeof status === "string" ? status.trim() : "";
+  const normalized = raw.toLowerCase();
+
+  switch (normalized) {
+    case "":
+    case "idle":
+      return "待预览";
+    case "ready":
+    case "done":
+    case "success":
+    case "ok":
+      return "已生成";
+    case "running":
+    case "processing":
+      return "处理中";
+    case "failed":
+    case "error":
+      return "失败";
+    default:
+      return raw || "待预览";
+  }
+}
+
 function instrumentCounts(data?: InstrumentResponse | null): { inserted: number; rejected: number; warnings: number } {
   return {
     inserted: data?.inserted_markers ?? data?.applied_insertions?.length ?? 0,
@@ -338,7 +360,6 @@ function resultStatusCard({
     </div>
   );
 }
-
 function FixedPathField({
   label,
   description,
@@ -521,24 +542,10 @@ export function OfflineStudioView(): JSX.Element {
   const [vuldocProtocol, setVuldocProtocol] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [selectedDocIds, setSelectedDocIds] = useState<string>("");
-  const [distillUseLlm, setDistillUseLlm] = useState(true);
   const [kbKeyword, setKbKeyword] = useState("");
   const [selectedKbEntryId, setSelectedKbEntryId] = useState("");
   const [riskUploadProtocol, setRiskUploadProtocol] = useState("");
-
-  useOperationLogDockSync(
-    [
-      { operationId: operationIds.protocol, source: "offline", label: "Protocol analysis", enabled: Boolean(operationIds.protocol) },
-      { operationId: operationIds.seeds, source: "offline", label: "Seed generation", enabled: Boolean(operationIds.seeds) },
-      { operationId: operationIds["risk-analyze"], source: "offline", label: "Risk analysis", enabled: Boolean(operationIds["risk-analyze"]) },
-      { operationId: operationIds["risk-preview"], source: "offline", label: "Risk preview", enabled: Boolean(operationIds["risk-preview"]) },
-      { operationId: operationIds["risk-upload"], source: "offline", label: "Risk upload", enabled: Boolean(operationIds["risk-upload"]) },
-      { operationId: operationIds.instrument, source: "offline", label: "Instrumentation", enabled: Boolean(operationIds.instrument) },
-      { operationId: operationIds["vuldocs-kb"], source: "offline", label: "Knowledge base", enabled: Boolean(operationIds["vuldocs-kb"]) },
-      { operationId: operationIds["build-fuzz"], source: "offline", label: "Build fuzz target", enabled: Boolean(operationIds["build-fuzz"]) },
-    ],
-    1200,
-  );
+  const [riskUploadRunning, setRiskUploadRunning] = useState(false);
 
   const protocolsQuery = useQuery({
     queryKey: ["protocols"],
@@ -588,7 +595,6 @@ export function OfflineStudioView(): JSX.Element {
     defaultValues: {
       protocol: "",
       content: "",
-      use_llm: true,
     },
   });
   const seedsForm = useForm<z.infer<typeof seedsSchema>>({
@@ -608,7 +614,6 @@ export function OfflineStudioView(): JSX.Element {
       max_workers: 4,
       llm_concurrency: 2,
       timeout_sec: 1800,
-      use_llm: true,
       use_static_prefilter: true,
       chunk_strategy: "function",
     },
@@ -632,7 +637,6 @@ export function OfflineStudioView(): JSX.Element {
       protocol: "",
       compiler: "afl-clang-fast",
       instrumentation_mode: "llvm",
-      use_llm: false,
     },
   });
 
@@ -809,7 +813,8 @@ export function OfflineStudioView(): JSX.Element {
   });
 
   const buildPlanMutation = useMutation({
-    mutationFn: (payload: z.infer<typeof buildPlanSchema>) => buildAssistantApi.createPlan(payload.protocol, payload),
+    mutationFn: ({ operationId, payload }: { operationId: string; payload: z.infer<typeof buildPlanSchema> }) =>
+      buildAssistantApi.createPlan(payload.protocol, payload, operationId),
     onSuccess: async (data: BuildPlan) => {
       addReference({
         type: "build-plan",
@@ -823,7 +828,8 @@ export function OfflineStudioView(): JSX.Element {
   });
 
   const buildRunMutation = useMutation({
-    mutationFn: ({ protocol, planId }: { protocol: string; planId: string }) => buildAssistantApi.runPlan(protocol, planId),
+    mutationFn: ({ protocol, planId, operationId }: { protocol: string; planId: string; operationId: string }) =>
+      buildAssistantApi.runPlan(protocol, planId, operationId),
     onSuccess: async (data: BuildRun) => {
       addReference({
         type: "build-run",
@@ -837,8 +843,8 @@ export function OfflineStudioView(): JSX.Element {
   });
 
   const launchProfileMutation = useMutation({
-    mutationFn: (payload: { protocol: string; target_id: string; build_id?: string; input_ref?: string; dict_ref?: string }) =>
-      buildAssistantApi.predictLaunchProfile(payload.protocol, payload),
+    mutationFn: (payload: { protocol: string; target_id: string; build_id?: string; input_ref?: string; dict_ref?: string; operationId: string }) =>
+      buildAssistantApi.predictLaunchProfile(payload.protocol, payload, payload.operationId),
     onSuccess: async (data: LaunchProfile) => {
       addReference({
         type: "launch-profile",
@@ -873,12 +879,10 @@ export function OfflineStudioView(): JSX.Element {
       protocol: string;
       operationId: string;
       docIds?: string[];
-      useLlm: boolean;
     }) =>
       vuldocsApi.distill(input.protocol, {
         operation_id: input.operationId,
         doc_ids: input.docIds,
-        use_llm: input.useLlm,
       }),
     onSuccess: async () => {
       await Promise.all([
@@ -912,6 +916,21 @@ export function OfflineStudioView(): JSX.Element {
   const selectedKbEntry = useMemo(() => {
     return allKbEntries.find((entry) => kbEntryKey(entry) === selectedKbEntryId) ?? allKbEntries[0] ?? null;
   }, [allKbEntries, selectedKbEntryId]);
+
+  useOperationLogDockSync(
+    [
+      { operationId: operationIds.protocol, source: "offline", label: "Protocol analysis", enabled: protocolMutation.isPending && Boolean(operationIds.protocol) },
+      { operationId: operationIds.seeds, source: "offline", label: "Seed generation", enabled: seedsMutation.isPending && Boolean(operationIds.seeds) },
+      { operationId: operationIds["risk-analyze"], source: "offline", label: "Risk analysis", enabled: riskAnalyzeMutation.isPending && Boolean(operationIds["risk-analyze"]) },
+      { operationId: operationIds["risk-preview"], source: "offline", label: "Risk preview", enabled: riskPreviewMutation.isPending && Boolean(operationIds["risk-preview"]) },
+      { operationId: operationIds["risk-upload"], source: "offline", label: "Risk upload", enabled: riskUploadRunning && Boolean(operationIds["risk-upload"]) },
+      { operationId: operationIds.instrument, source: "offline", label: "Instrumentation", enabled: instrumentMutation.isPending && Boolean(operationIds.instrument) },
+      { operationId: operationIds["vuldocs-kb"], source: "offline", label: "Knowledge base", enabled: (vuldocUploadMutation.isPending || vuldocDistillMutation.isPending) && Boolean(operationIds["vuldocs-kb"]) },
+      { operationId: operationIds["build-fuzz"], source: "offline", label: "Build fuzz target", enabled: (buildPlanMutation.isPending || buildRunMutation.isPending || launchProfileMutation.isPending) && Boolean(operationIds["build-fuzz"]) },
+    ],
+    1200,
+  );
+
   const previewData = riskPreviewMutation.data ?? null;
   const previewFindings = previewData?.findings ?? previewData?.items ?? [];
   const previewSummary = previewRawSummary(previewData);
@@ -1043,13 +1062,12 @@ export function OfflineStudioView(): JSX.Element {
                       name: FIXED_PROTOCOL_SPEC_NAME,
                       content: values.content?.trim() || undefined,
                       operation_id,
-                      use_llm: values.use_llm,
                     });
                   })}
                 >
                   <FormField
                     label="协议名称 protocol"
-                    description="仅允许选择已有协议资产，确定后自动绑定 source/ 与 specs/ 预设路径。"
+                    description="选择已有协议资产后自动查找绑定资产路径"
                   >
                     <ProtocolComboInput
                       value={protocolForm.watch("protocol")}
@@ -1074,34 +1092,23 @@ export function OfflineStudioView(): JSX.Element {
                   </FormField>
                   <FixedPathField
                     label="源码路径 source_ref"
-                    description="固定引用协议资产模型中的 source/ 虚拟目录。"
+                    description="引用协议资产目录中的 source/ 路径"
                     value={protocolAssets?.sourceDisplay ?? "选择协议后自动生成"}
                   />
                   <FixedPathField
                     label="规范输出 output_ref"
-                    description="固定保存到 specs/protocol_spec.json。"
+                    description="输出到协议资产的 specs/ 路径"
                     value={protocolAssets?.specFileDisplay ?? "选择协议后自动生成"}
                   />
                   <FixedPathField
                     label="规范文件名 name"
-                    description="协议规范提取固定使用预设文件名。"
+                    description="规范提取固定的预设文件名"
                     value={FIXED_PROTOCOL_SPEC_NAME}
                   />
                   <div className="md:col-span-2">
-                    <FormField label="手动提供规范内容 content" description="可选；填写后后端会直接保存到预设规范路径，留空时后端按 source/ 扫描源码生成规范。">
+                    <FormField label="手动提供规范内容 content" description="可选 | 填写后直接保存到预设规范路径，留空则走默认源码提取链路生成规范">
                       <Textarea {...protocolForm.register("content")} />
                     </FormField>
-                  </div>
-                  <div className="md:col-span-2 flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/50 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">use_llm</p>
-                      <p className="text-xs text-muted-foreground">是否允许后端按 config.yaml 中的 LLM 配置进行协议分析；前端不传 base_url/api_key/model。</p>
-                    </div>
-                    <Switch
-                      className="shrink-0"
-                      checked={protocolForm.watch("use_llm")}
-                      onCheckedChange={(checked) => protocolForm.setValue("use_llm", checked)}
-                    />
                   </div>
                   <div className="md:col-span-2">
                     <Button type="submit" disabled={protocolMutation.isPending || !protocolAssets}>
@@ -1118,15 +1125,23 @@ export function OfflineStudioView(): JSX.Element {
               <Card className="flex h-full min-h-0 flex-col overflow-hidden">
                 <CardHeader className="shrink-0">
                   <CardTitle>协议提取结果</CardTitle>
-                  <CardDescription>只保留结构化结果预览，过程输出与错误详情统一进入底部 GlobalLogDock。</CardDescription>
+                  <CardDescription>上方显示当前动作回显，仅捕获协议规范提取最近一次后端操作；结构化结果预览保留在下方。</CardDescription>
                 </CardHeader>
-                <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-                  {resultStatusCard({
-                    title: "日志出口",
-                    running: protocolMutation.isPending,
-                    operationId: operationIds.protocol,
-                    note: "协议提取过程输出已进入 GlobalLogDock。",
-                  })}
+                <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+                  <div className="h-[24vh] min-h-[18vh] max-h-[30vh] shrink-0">
+                    <OperationLogPanel
+                      operationId={operationIds.protocol}
+                      running={protocolMutation.isPending}
+                      title="当前动作"
+                      maxLines={120}
+                      pollIntervalMs={1000}
+                      variant="compact"
+                      eagerStart={false}
+                      note="仅捕获协议规范提取最近一次后端操作回显。"
+                      className="h-full min-h-0"
+                      logClassName="bg-background/45"
+                    />
+                  </div>
                   <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
                     <JsonViewer
                       data={
@@ -1156,7 +1171,7 @@ export function OfflineStudioView(): JSX.Element {
               <CardHeader>
                 <CardTitle>初始种子生成</CardTitle>
                 <CardDescription>
-                  规范输入与种子输出均固定绑定到协议资产模型预设路径。
+                  依托协议源码资产和漏洞知识库的模糊输入初始种子生成
                 </CardDescription>
               </CardHeader>
               <CardContent className="min-h-0 flex-1 overflow-y-auto">
@@ -1185,7 +1200,7 @@ export function OfflineStudioView(): JSX.Element {
                 >
                   <FormField
                     label="协议名"
-                    description="必须完全匹配已有协议资产，规范与输出目录按协议资产模型自动绑定。"
+                    description="匹配已有协议资产，相关目录按协议查找结果自动绑定"
                   >
                     <ProtocolComboInput
                       value={seedsForm.watch("protocol")}
@@ -1210,17 +1225,17 @@ export function OfflineStudioView(): JSX.Element {
                   </FormField>
                   <FixedPathField
                     label="规范文件 spec_ref"
-                    description="固定读取 specs/protocol_spec.json。"
+                    description="固定读取 specs/protocol_spec.json"
                     value={seedsAssets?.specFileDisplay ?? "选择协议后自动生成"}
                   />
                   <FixedPathField
                     label="规范目录 spec_dir"
-                    description="协议规范目录固定为 specs/。"
+                    description="协议规范目录固定为 specs/"
                     value={seedsAssets?.specsDirDisplay ?? "选择协议后自动生成"}
                   />
                   <FixedPathField
                     label="输出目录 output_ref"
-                    description="固定写入 seeds/bin/ 目录。"
+                    description="固定写入 seeds/bin/ 目录"
                     value={seedsAssets?.seedsOutputDisplay ?? "选择协议后自动生成"}
                   />
                   <FormField label="关键词">
@@ -1275,15 +1290,23 @@ export function OfflineStudioView(): JSX.Element {
               <Card className="flex h-full min-h-0 flex-col overflow-hidden">
                 <CardHeader className="shrink-0">
                   <CardTitle>种子生成结果</CardTitle>
-                  <CardDescription>结构化结果保留在此，生成过程输出统一写入底部 GlobalLogDock。</CardDescription>
+                  <CardDescription>上方显示当前动作回显，仅捕获初始种子生成最近一次后端操作；结构化结果预览保留在下方。</CardDescription>
                 </CardHeader>
-                <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-                  {resultStatusCard({
-                    title: "日志出口",
-                    running: seedsMutation.isPending,
-                    operationId: operationIds.seeds,
-                    note: "种子生成过程输出与错误详情已进入 GlobalLogDock。",
-                  })}
+                <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+                  <div className="h-[24vh] min-h-[18vh] max-h-[30vh] shrink-0">
+                    <OperationLogPanel
+                      operationId={operationIds.seeds}
+                      running={seedsMutation.isPending}
+                      title="当前动作"
+                      maxLines={120}
+                      pollIntervalMs={1000}
+                      variant="compact"
+                      eagerStart={false}
+                      note="仅捕获初始种子生成最近一次后端操作回显。"
+                      className="h-full min-h-0"
+                      logClassName="bg-background/45"
+                    />
+                  </div>
                   <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
                     <JsonViewer data={seedsMutation.data ?? { status: "idle" }} compact />
                   </div>
@@ -1323,7 +1346,6 @@ export function OfflineStudioView(): JSX.Element {
                       max_workers: values.max_workers,
                       llm_concurrency: values.llm_concurrency,
                       chunk_strategy: values.chunk_strategy,
-                      use_llm: values.use_llm,
                       use_static_prefilter: values.use_static_prefilter,
                       timeout_sec: values.timeout_sec,
                     });
@@ -1371,7 +1393,6 @@ export function OfflineStudioView(): JSX.Element {
                       <FormField label="llm_concurrency"><Input type="number" {...riskAnalyzeForm.register("llm_concurrency")} /></FormField>
                       <FormField label="timeout_sec"><Input type="number" {...riskAnalyzeForm.register("timeout_sec")} /></FormField>
                       <FormField label="chunk_strategy"><Input {...riskAnalyzeForm.register("chunk_strategy")} /></FormField>
-                      <div className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3"><div className="min-w-0"><p className="text-sm font-medium">use_llm</p><p className="text-xs text-muted-foreground">是否启用 LLM 风险识别</p></div><Switch className="shrink-0" checked={riskAnalyzeForm.watch("use_llm")} onCheckedChange={(checked) => riskAnalyzeForm.setValue("use_llm", checked)} /></div>
                       <div className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3"><div className="min-w-0"><p className="text-sm font-medium">use_static_prefilter</p><p className="text-xs text-muted-foreground">先用静态预筛降低 LLM 压力</p></div><Switch className="shrink-0" checked={riskAnalyzeForm.watch("use_static_prefilter")} onCheckedChange={(checked) => riskAnalyzeForm.setValue("use_static_prefilter", checked)} /></div>
                     </div>
                   </details>
@@ -1418,7 +1439,7 @@ export function OfflineStudioView(): JSX.Element {
             <Card className="flex min-h-[30rem] flex-col overflow-hidden">
               <CardHeader className="border-b border-border/50">
                 <CardTitle>风险结果预览</CardTitle>
-                <CardDescription>读取风险分析输出，不再在页面内展示增量执行输出。</CardDescription>
+                <CardDescription>读取风险分析输出，并在下方显示当前动作回显。</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 overflow-y-auto p-5">
                 <form
@@ -1441,7 +1462,7 @@ export function OfflineStudioView(): JSX.Element {
                 >
                   <FormField
                     label="协议 protocol"
-                    description="必须完全匹配已有协议资产，分析结果固定读取 risk/analyses/final_analysis.json。"
+                    description="匹配已有协议资产 | 固定读取 risk/analyses/final_analysis.json"
                   >
                     <ProtocolComboInput
                       value={riskPreviewForm.watch("protocol")}
@@ -1466,7 +1487,7 @@ export function OfflineStudioView(): JSX.Element {
                   </FormField>
                   <FixedPathField
                     label="analysis_ref"
-                    description="固定读取 risk/analyses/final_analysis.json。"
+                    description="固定读取 risk/analyses/final_analysis.json"
                     value={riskPreviewAssets?.riskAnalysisDisplay ?? "选择协议后自动生成"}
                   />
                   <Button type="submit" className="w-full" disabled={riskPreviewMutation.isPending || !riskPreviewAssets}>
@@ -1474,23 +1495,30 @@ export function OfflineStudioView(): JSX.Element {
                     {riskPreviewMutation.isPending ? "读取中..." : "查看预览"}
                   </Button>
                 </form>
-
-                {resultStatusCard({
-                  title: "日志出口",
-                  running: riskPreviewMutation.isPending,
-                  operationId: operationIds["risk-preview"],
-                  note: "预览只显示结构化结果，过程输出已进入 GlobalLogDock。",
-                })}
+                <div className="h-[24vh] min-h-[18vh] max-h-[30vh] shrink-0">
+                  <OperationLogPanel
+                    operationId={operationIds["risk-preview"]}
+                    running={riskPreviewMutation.isPending}
+                    title="当前动作"
+                    maxLines={120}
+                    pollIntervalMs={1000}
+                    variant="compact"
+                    eagerStart={false}
+                    note="仅捕获风险结果预览最近一次后端操作回显。"
+                    className="h-full min-h-0"
+                    logClassName="bg-background/45"
+                  />
+                </div>
               </CardContent>
             </Card>
 
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <SummaryCard title="Status" value={String(previewSummary.status ?? "idle")} hint="preview status" statusColor="violet" />
-                <SummaryCard title="Findings" value={String(previewSummary.findings ?? 0)} hint="risk items" statusColor="orange" />
-                <SummaryCard title="Bytes" value={String(previewSummary.size ?? 0)} hint="preview size" statusColor="blue" />
-                <SummaryCard title="Path" value={previewSummary.analysis_path ? "ready" : "missing"} hint={String(previewSummary.analysis_path || "-")} statusColor="teal" />
-              </div>
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <SummaryCard title="预览状态" value={previewStatusLabel(previewSummary.status)} hint="当前分析结果预览状态" valueClassName="text-[1.4rem] sm:text-[1.55rem]" statusColor="indigo" />
+                  <SummaryCard title="风险条目" value={String(previewSummary.findings ?? 0)} hint="当前识别出的风险数量" valueClassName="text-[1.4rem] sm:text-[1.55rem]" statusColor="rose" />
+                  <SummaryCard title="结果大小" value={String(previewSummary.size ?? 0)} hint="预览结果大小，单位为字节" valueClassName="text-[1.4rem] sm:text-[1.55rem]" statusColor="blue" />
+                  <SummaryCard title="结果文件" value={previewSummary.analysis_path ? "已定位" : "缺失"} hint="分析结果文件是否已生成" valueClassName="text-[1.4rem] sm:text-[1.55rem]" statusColor="teal" />
+                </div>
 
               <Card className="overflow-hidden">
                 <CardHeader className="border-b border-border/50">
@@ -1602,8 +1630,10 @@ export function OfflineStudioView(): JSX.Element {
                         const protocol = selectedProtocolForRiskUpload || "";
                         setOp("risk-upload", operationId);
                         setUploadError(undefined);
+                        setRiskUploadRunning(true);
 
                         if (!protocol) {
+                          setRiskUploadRunning(false);
                           setUploadError(new Error("请选择已有协议资产名后再上传风险结果。"));
                           return;
                         }
@@ -1643,6 +1673,8 @@ export function OfflineStudioView(): JSX.Element {
                           await protocolsQuery.refetch();
                         } catch (error) {
                           setUploadError(error);
+                        } finally {
+                          setRiskUploadRunning(false);
                         }
                       }}
                     />
@@ -1780,13 +1812,20 @@ export function OfflineStudioView(): JSX.Element {
                     {instrumentMutation.isPending ? "插桩中..." : "执行插桩"}
                   </Button>
                 </form>
-
-                {resultStatusCard({
-                  title: "日志出口",
-                  running: instrumentMutation.isPending,
-                  operationId: operationIds.instrument,
-                  note: "插桩过程输出与失败详情已统一进入 GlobalLogDock。",
-                })}
+                <div className="h-[24vh] min-h-[18vh] max-h-[30vh] shrink-0">
+                  <OperationLogPanel
+                    operationId={operationIds.instrument}
+                    running={instrumentMutation.isPending}
+                    title="当前动作"
+                    maxLines={120}
+                    pollIntervalMs={1000}
+                    variant="compact"
+                    eagerStart={false}
+                    note="仅捕获插桩处理最近一次后端操作回显。"
+                    className="h-full min-h-0"
+                    logClassName="bg-background/45"
+                  />
+                </div>
               </CardContent>
             </Card>
 
@@ -1797,14 +1836,15 @@ export function OfflineStudioView(): JSX.Element {
               </CardHeader>
               <CardContent className="space-y-4 p-5">
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <SummaryCard title="Markers" value={String(instrumentSummary.inserted)} hint="inserted_markers" statusColor="violet" />
-                  <SummaryCard title="Rejected" value={String(instrumentSummary.rejected)} hint="rejected_insertions" statusColor="orange" />
-                  <SummaryCard title="Warnings" value={String(instrumentSummary.warnings)} hint="validation_warnings" statusColor="gold" />
+                  <SummaryCard title="标记点" value={String(instrumentSummary.inserted)} hint="已插入的探针标记数量" valueClassName="text-[1.4rem] sm:text-[1.55rem]" statusColor="blue" />
+                  <SummaryCard title="拒绝点" value={String(instrumentSummary.rejected)} hint="安全校验后拒绝的插桩点" valueClassName="text-[1.4rem] sm:text-[1.55rem]" statusColor="orange" />
+                  <SummaryCard title="警告数" value={String(instrumentSummary.warnings)} hint="插桩校验产生的告警数量" valueClassName="text-[1.4rem] sm:text-[1.55rem]" statusColor="amber" />
                   <SummaryCard
-                    title="Compile"
-                    value={instrumentData?.compile_check?.enabled ? (instrumentData?.compile_check?.passed ? "passed" : "failed") : "n/a"}
-                    hint="compile_check"
-                    statusColor={instrumentData?.compile_check?.passed ? "teal" : "coral"}
+                    title="编译检查"
+                    value={instrumentData?.compile_check?.enabled ? (instrumentData?.compile_check?.passed ? "通过" : "失败") : "未启用"}
+                    hint="插桩后编译校验结果"
+                    valueClassName="text-[1.4rem] sm:text-[1.55rem]"
+                    statusColor={instrumentData?.compile_check?.passed ? "emerald" : "danger"}
                   />
                 </div>
 
@@ -1863,9 +1903,9 @@ export function OfflineStudioView(): JSX.Element {
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <SummaryCard title="知识条目" value={String(summary?.total ?? 0)} hint="kb/summary" statusColor="violet" />
-              <SummaryCard title="原始文档" value={String(vuldocsQuery.data?.length ?? 0)} hint="vuldocs" statusColor="teal" />
-              <SummaryCard title="图谱节点" value={String(graphNodeCount)} hint={`${graphEdgeCount} edges`} statusColor="gold" />
-              <SummaryCard title="时间线事件" value={String(timelineEventCount)} hint="kb/timeline" statusColor="coral" />
+              <SummaryCard title="原始文档" value={String(vuldocsQuery.data?.length ?? 0)} hint="vuldocs" statusColor="indigo" />
+              <SummaryCard title="图谱节点" value={String(graphNodeCount)} hint={`${graphEdgeCount} edges`} statusColor="cyan" />
+              <SummaryCard title="时间线事件" value={String(timelineEventCount)} hint="kb/timeline" statusColor="blue" />
             </div>
 
             <div className="grid gap-4 xl:grid-cols-[0.78fr_1.22fr_0.92fr]">
@@ -1875,12 +1915,12 @@ export function OfflineStudioView(): JSX.Element {
                     <UploadCloud className="size-4 text-primary" />
                     漏洞文档源
                   </CardTitle>
-                  <CardDescription>左侧保持上传、蒸馏和搜索参数，执行输出统一进入底部 GlobalLogDock。</CardDescription>
+                  <CardDescription>提供上传、蒸馏和搜索参数入口</CardDescription>
                 </CardHeader>
                 <CardContent className="console-scrollbar flex-1 space-y-4 overflow-y-auto p-5">
                   <FormField
                     label="协议名"
-                    description="仅允许选择已有协议资产，VulDoc / KB 将写入对应协议预设目录。"
+                    description="选择已有协议资产，VulDoc / KB 将写入对应预设目录"
                   >
                     <ProtocolComboInput
                       value={vuldocProtocol}
@@ -1896,7 +1936,7 @@ export function OfflineStudioView(): JSX.Element {
 
                   <FormField
                     label="漏洞文档"
-                    description="支持多文件批量上传，按协议 workspace 归档。"
+                    description="支持多文件批量上传，按协议 workspace 归档"
                   >
                     <Input
                       type="file"
@@ -1928,7 +1968,7 @@ export function OfflineStudioView(): JSX.Element {
 
                   <FormField
                     label="指定 doc_ids 蒸馏"
-                    description="逗号或换行分隔；留空表示蒸馏该协议下全部文档。"
+                    description="逗号或换行分隔 | 留空表示蒸馏该协议下全部文档。"
                   >
                     <Textarea
                       className="min-h-[7.5rem] resize-y"
@@ -1936,16 +1976,6 @@ export function OfflineStudioView(): JSX.Element {
                       onChange={(event) => setSelectedDocIds(event.target.value)}
                     />
                   </FormField>
-
-                  <div className="rounded-2xl border border-border/60 bg-background/45 px-4 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">启用 LLM 蒸馏</p>
-                        <p className="mt-1 text-xs text-muted-foreground">是否使用后端配置中的 LLM 流程增强漏洞文档蒸馏。</p>
-                      </div>
-                      <Switch className="shrink-0" checked={distillUseLlm} onCheckedChange={setDistillUseLlm} />
-                    </div>
-                  </div>
 
                   <Button
                     variant="secondary"
@@ -1963,7 +1993,6 @@ export function OfflineStudioView(): JSX.Element {
                         protocol: selectedVuldocProtocol || "",
                         operationId,
                         docIds: docIds.length ? docIds : undefined,
-                        useLlm: distillUseLlm,
                       });
                     }}
                   >
@@ -1988,12 +2017,20 @@ export function OfflineStudioView(): JSX.Element {
                     </div>
                   </div>
 
-                  {resultStatusCard({
-                    title: "日志出口",
-                    running: vuldocUploadMutation.isPending || vuldocDistillMutation.isPending,
-                    operationId: operationIds["vuldocs-kb"],
-                    note: "上传、蒸馏和检索输出都进入 GlobalLogDock。",
-                  })}
+                  <div className="h-[24vh] min-h-[18vh] max-h-[30vh] shrink-0">
+                    <OperationLogPanel
+                      operationId={operationIds["vuldocs-kb"]}
+                      running={vuldocUploadMutation.isPending || vuldocDistillMutation.isPending}
+                      title="当前动作"
+                      maxLines={120}
+                      pollIntervalMs={1000}
+                      variant="compact"
+                      eagerStart={false}
+                      note="仅捕获漏洞文档上传与蒸馏最近一次后端操作回显。"
+                      className="h-full min-h-0"
+                      logClassName="bg-background/45"
+                    />
+                  </div>
 
                   <div className="rounded-2xl border border-border/60 bg-background/45 px-4 py-4">
                     <div className="flex items-center gap-2 text-sm font-medium">
@@ -2027,7 +2064,7 @@ export function OfflineStudioView(): JSX.Element {
                       <Database className="size-4 text-primary" />
                       知识摘要与搜索命中
                     </CardTitle>
-                    <CardDescription>中列突出可操作结果：热门条目、搜索命中和结构化字段，不再使用拉长整页的展开块。</CardDescription>
+                    <CardDescription>上传结果 | 漏洞知识库记录字段摘要 | 热门条目、搜索命中和结构化字段</CardDescription>
                   </CardHeader>
                   <CardContent className="grid gap-4 p-5 lg:grid-cols-[0.94fr_1.06fr]">
                     <div className="space-y-3">
@@ -2049,7 +2086,7 @@ export function OfflineStudioView(): JSX.Element {
                                   className={cn(
                                     "w-full rounded-2xl border p-4 text-left transition-colors",
                                     isActive
-                                      ? "border-[hsl(var(--accent-blue)/0.34)] bg-[hsl(var(--accent-blue-light)/0.72)] dark:border-[hsl(var(--accent-pink)/0.28)] dark:bg-[hsl(var(--accent-pink-soft)/0.22)]"
+                                      ? "border-[hsl(271_76%_58%/0.34)] bg-[hsl(278_100%_98%/0.88)] dark:border-[hsl(272_88%_76%/0.32)] dark:bg-[hsl(268_38%_24%/0.78)]"
                                       : "border-border/60 bg-background/45 hover:bg-background/65",
                                   )}
                                 >
@@ -2097,7 +2134,7 @@ export function OfflineStudioView(): JSX.Element {
                                   className={cn(
                                     "w-full rounded-2xl border p-4 text-left transition-colors",
                                     isActive
-                                      ? "border-[hsl(var(--accent-orange)/0.34)] bg-[hsl(var(--accent-orange-light)/0.66)] dark:border-[hsl(var(--accent-pink)/0.28)] dark:bg-[hsl(var(--accent-pink-soft)/0.24)]"
+                                      ? "border-[hsl(var(--accent-blue)/0.28)] bg-[hsl(var(--accent-blue-light)/0.62)] dark:border-[hsl(216_90%_76%/0.24)] dark:bg-[hsl(223_34%_24%/0.74)]"
                                       : "border-border/60 bg-background/45 hover:bg-background/65",
                                   )}
                                 >
@@ -2129,7 +2166,7 @@ export function OfflineStudioView(): JSX.Element {
                       <Network className="size-4 text-primary" />
                       图谱与状态摘要
                     </CardTitle>
-                    <CardDescription>右列负责统计、引用和已选条目证据，不再把原始 JSON 大面积铺在页面里。</CardDescription>
+                    <CardDescription>统计、引用和已选条目证据</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4 p-5">
                     <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
@@ -2166,11 +2203,11 @@ export function OfflineStudioView(): JSX.Element {
                 <Card className="overflow-hidden">
                   <CardHeader className="border-b border-border/50">
                     <CardTitle className="text-base">条目证据与引用</CardTitle>
-                    <CardDescription>主结果之外的详情集中到右侧卡片，并限制为卡片内滚动。</CardDescription>
+                    <CardDescription>摘要之外的详情</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4 p-5">
                     {!selectedKbEntry ? (
-                      <p className="text-sm text-muted-foreground">请选择一条知识条目查看详细证据。</p>
+                      <p className="text-sm text-muted-foreground">请选择一条知识条目查看详细证据</p>
                     ) : (
                       <>
                         <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
@@ -2224,7 +2261,7 @@ export function OfflineStudioView(): JSX.Element {
                 <Card className="overflow-hidden">
                   <CardHeader className="border-b border-border/50">
                     <CardTitle className="text-base">原始返回快照</CardTitle>
-                    <CardDescription>保留调试入口，但限制在独立小卡片中内联滚动。</CardDescription>
+                    <CardDescription>用于调试查看返回的JSON字段</CardDescription>
                   </CardHeader>
                   <CardContent className="p-5">
                     <div className="console-scrollbar max-h-[16rem] overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
@@ -2264,12 +2301,15 @@ export function OfflineStudioView(): JSX.Element {
                     const operationId = createOperationId("build-fuzz");
                     setOp("build-fuzz", operationId);
                     buildPlanMutation.mutate({
-                      ...values,
-                      protocol: buildProtocol,
-                      source_ref: buildAssets.buildSourceRef,
-                      input_ref: buildAssets.buildInputRef,
-                      dict_ref: buildAssets.dictRef,
-                    } as z.infer<typeof buildPlanSchema> & { source_ref: string; input_ref: string; dict_ref: string });
+                      operationId,
+                      payload: {
+                        ...values,
+                        protocol: buildProtocol,
+                        source_ref: buildAssets.buildSourceRef,
+                        input_ref: buildAssets.buildInputRef,
+                        dict_ref: buildAssets.dictRef,
+                      } as z.infer<typeof buildPlanSchema>,
+                    });
                   })}
                 >
                   <FormField label="协议名" description="必须完全匹配已有协议资产，构建输入引用按资产模型自动绑定。">
@@ -2306,13 +2346,6 @@ export function OfflineStudioView(): JSX.Element {
                   </div>
                   <FixedPathField label="input_ref" description="固定引用种子目录 seeds/bin/。" value={buildAssets?.buildInputDisplay ?? "选择协议后自动生成"} />
                   <FixedPathField label="dict_ref" description="固定引用协议字典 dicts/auto.dict。" value={buildAssets?.dictDisplay ?? "选择协议后自动生成"} />
-                  <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/45 px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium">LLM 辅助</p>
-                      <p className="text-xs text-muted-foreground">仅生成建议候选，最终 BuildPlan 仍由后端本地规则主导。</p>
-                    </div>
-                    <Switch checked={buildPlanForm.watch("use_llm")} onCheckedChange={(checked) => buildPlanForm.setValue("use_llm", checked)} />
-                  </div>
                   <div className="flex flex-wrap gap-3">
                     <Button type="submit" disabled={buildPlanMutation.isPending || !buildAssets}>
                       <Wand2 className="size-4" />
@@ -2325,7 +2358,9 @@ export function OfflineStudioView(): JSX.Element {
                       onClick={() => {
                         const latest = buildPlansQuery.data?.[0];
                         if (!latest || !buildProtocol) return;
-                        buildRunMutation.mutate({ protocol: buildProtocol, planId: latest.plan_id });
+                        const operationId = createOperationId("build-fuzz-run");
+                        setOp("build-fuzz", operationId);
+                        buildRunMutation.mutate({ protocol: buildProtocol, planId: latest.plan_id, operationId });
                       }}
                     >
                       <CheckCircle2 className="size-4" />
@@ -2334,20 +2369,28 @@ export function OfflineStudioView(): JSX.Element {
                   </div>
                 </form>
 
-                {resultStatusCard({
-                  title: "日志出口",
-                  running: buildPlanMutation.isPending || buildRunMutation.isPending || launchProfileMutation.isPending,
-                  operationId: operationIds["build-fuzz"],
-                  note: "构建规划与启动参数预测过程统一进入 GlobalLogDock。",
-                })}
+                <div className="h-[24vh] min-h-[18vh] max-h-[30vh] shrink-0">
+                  <OperationLogPanel
+                    operationId={operationIds["build-fuzz"]}
+                    running={buildPlanMutation.isPending || buildRunMutation.isPending || launchProfileMutation.isPending}
+                    title="当前动作"
+                    maxLines={120}
+                    pollIntervalMs={1000}
+                    variant="compact"
+                    eagerStart={false}
+                    note="仅捕获 BuildPlan 生成、BuildRun 执行与 LaunchProfile 预测最近一次后端操作回显。"
+                    className="h-full min-h-0"
+                    logClassName="bg-background/45"
+                  />
+                </div>
               </CardContent>
             </Card>
 
             <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-3">
-                <SummaryCard title="Probe" value={buildProbeQuery.data ? "ready" : "idle"} hint={buildProbeQuery.data?.source_ref ?? "等待协议"} statusColor="teal" />
-                <SummaryCard title="Plans" value={String(buildPlansQuery.data?.length ?? 0)} hint="server generated" statusColor="violet" />
-                <SummaryCard title="Targets" value={String(buildTargetsQuery.data?.length ?? 0)} hint="build outputs" statusColor="gold" />
+                <SummaryCard title="源码探测" value={buildProbeQuery.data ? "就绪" : "等待"} hint="构建前源码探测状态" statusColor="blue" />
+                <SummaryCard title="构建计划" value={String(buildPlansQuery.data?.length ?? 0)} hint="后端已生成的构建计划数量" statusColor="emerald" />
+                <SummaryCard title="目标产物" value={String(buildTargetsQuery.data?.length ?? 0)} hint="当前可用的构建目标数量" statusColor="amber" />
               </div>
 
               <Card className="overflow-hidden">
@@ -2390,15 +2433,18 @@ export function OfflineStudioView(): JSX.Element {
                               size="sm"
                               variant="outline"
                               disabled={!buildProtocol || !buildAssets}
-                              onClick={() =>
+                              onClick={() => {
+                                const operationId = createOperationId("build-fuzz-profile");
+                                setOp("build-fuzz", operationId);
                                 launchProfileMutation.mutate({
                                   protocol: buildProtocol,
                                   target_id: target.target_id,
                                   build_id: buildRunsQuery.data?.[0]?.build_id,
                                   input_ref: buildAssets?.buildInputRef || undefined,
                                   dict_ref: buildAssets?.dictRef || undefined,
-                                })
-                              }
+                                  operationId,
+                                });
+                              }}
                             >
                               预测 Profile
                             </Button>

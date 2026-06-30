@@ -7,6 +7,7 @@ interface SummaryCardProps {
   value: string;
   hint?: string;
   trend?: string;
+  valueClassName?: string;
   statusColor?:
     | "primary"
     | "success"
@@ -81,6 +82,7 @@ export function SummaryCard({
   value,
   hint,
   trend,
+  valueClassName,
   statusColor = "primary",
 }: SummaryCardProps): JSX.Element {
   return (
@@ -93,15 +95,20 @@ export function SummaryCard({
       <div className="summary-card-orb" />
       <CardContent className="relative p-5">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="summary-card-title text-xs uppercase tracking-[0.18em]">
+          <div className="min-w-0 flex-1">
+            <p className="summary-card-title break-words text-xs uppercase leading-5 tracking-[0.08em]">
               {title}
             </p>
-            <div className="summary-card-value mt-3 text-3xl font-semibold tracking-tight">
+            <div
+              className={cn(
+                "summary-card-value mt-3 break-words text-3xl font-semibold leading-tight tracking-tight",
+                valueClassName,
+              )}
+            >
               {value}
             </div>
             {hint ? (
-              <p className="summary-card-copy mt-2 text-sm leading-6">{hint}</p>
+              <p className="summary-card-copy mt-2 break-words text-sm leading-5">{hint}</p>
             ) : null}
           </div>
           {trend ? (

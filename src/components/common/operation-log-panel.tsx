@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { RefreshCw, TerminalSquare } from "lucide-react";
+import { Activity, RefreshCw, TerminalSquare } from "lucide-react";
 import { operationsApi } from "@/lib/api/services/operations";
 import type { OperationLogItem } from "@/types/api/operations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +60,9 @@ export function OperationLogPanel({
   maxLines = 300,
   pollIntervalMs = 1_000,
   clearAfterItems = 800,
+  variant = "card",
+  eagerStart = true,
+  note,
   className,
   logClassName,
 }: {
@@ -69,6 +72,9 @@ export function OperationLogPanel({
   maxLines?: number;
   pollIntervalMs?: number;
   clearAfterItems?: number;
+  variant?: "card" | "compact";
+  eagerStart?: boolean;
+  note?: string;
   className?: string;
   logClassName?: string;
 }): JSX.Element {
@@ -85,12 +91,18 @@ export function OperationLogPanel({
   useEffect(() => {
     setItems([]);
     setNextSeq(0);
-    setStatus(operationId ? "running" : "idle");
+    setStatus(operationId ? (eagerStart ? "running" : "idle") : "idle");
     setError(undefined);
     setFailures(0);
     setClearCycles(0);
     capturedSinceClearRef.current = 0;
-  }, [operationId]);
+  }, [eagerStart, operationId]);
+
+  useEffect(() => {
+    if (operationId && running && status === "idle") {
+      setStatus("running");
+    }
+  }, [operationId, running, status]);
 
   const canPoll = Boolean(operationId) && failures <= 5 && (running || status === "running" || status === "unknown");
 
@@ -148,12 +160,109 @@ export function OperationLogPanel({
     });
   }, [items.length, clearCycles]);
 
-  const description = useMemo(() => {
+  const helperText = useMemo(() => {
     if (!operationId) return "尚未开始。启动任务后这里会显示后端阶段输出。";
     if (failures > 5) return "日志轮询连续失败超过 5 次，已停止自动重试。";
-    if (clearCycles > 0) return `operation_id: ${operationId} · 已自动清屏 ${clearCycles} 次`;
-    return `operation_id: ${operationId}`;
+    if (clearCycles > 0) return `已自动清屏 ${clearCycles} 次`;
+    return null;
   }, [clearCycles, failures, operationId]);
+
+  const operationText = `operation_id: ${operationId ?? "-"}`;
+
+  const reconnectButton = failures > 5 ? (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => {
+        setFailures(0);
+        void fetchLogs();
+      }}
+    >
+      <RefreshCw className="size-3.5" />
+      重新连接
+    </Button>
+  ) : null;
+
+  const logContent = (
+    <>
+      <ApiErrorReporter error={error} title="日志读取失败" source="operations" />
+
+      <div
+        ref={logBoxRef}
+        className={cn(
+          "console-scrollbar min-h-0 flex-1 overflow-y-auto rounded-xl border border-border/60 bg-background/72 p-3 font-mono text-xs",
+          logClassName,
+        )}
+      >
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{operationId ? "暂无日志。" : "尚未开始。"}</p>
+        ) : (
+          <div className="space-y-2">
+            {items.map((item, index) => {
+              const message = item.message ?? "";
+              const dataText = item.data && Object.keys(item.data).length > 0 ? safeStringify(item.data) : "";
+
+              return (
+                <div
+                  key={`${item.seq}-${index}`}
+                  className={cn("rounded-lg border p-2", levelTone(item.level))}
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                    <span className="text-primary">#{item.seq}</span>
+                    <span>{formatDateTime(item.at)}</span>
+                    <StatusBadge status={item.level ?? "info"} />
+                    {item.stage ? (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
+                        {item.stage}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <pre className="mt-1 whitespace-pre-wrap break-words leading-relaxed">
+                    {renderHighlightedText(message, `msg-${item.seq}-${index}`)}
+                  </pre>
+
+                  {dataText ? (
+                    <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border border-border/45 bg-background/62 p-2 leading-relaxed text-muted-foreground">
+                      {renderHighlightedText(dataText, `data-${item.seq}-${index}`)}
+                    </pre>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  if (variant === "compact") {
+    return (
+      <div className={cn("flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background/45 px-4 py-3", className)}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Activity className={cn("size-4", running ? "text-primary" : "text-muted-foreground")} />
+              {title}
+            </div>
+            {note ? <p className="mt-2 text-xs text-muted-foreground">{note}</p> : null}
+            <p className="mt-2 break-all text-xs text-muted-foreground">{operationText}</p>
+            {helperText ? <p className="mt-2 text-xs text-muted-foreground">{helperText}</p> : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <StatusBadge status={status} />
+            {reconnectButton}
+          </div>
+        </div>
+
+        <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+          {logContent}
+        </div>
+      </div>
+    );
+  }
+
+  const description = [helperText, operationText].filter(Boolean).join(" · ");
 
   return (
     <Card className={cn("flex h-full min-h-0 flex-col overflow-hidden", className)}>
@@ -167,71 +276,12 @@ export function OperationLogPanel({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <StatusBadge status={status} />
-          {failures > 5 ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setFailures(0);
-                void fetchLogs();
-              }}
-            >
-              <RefreshCw className="size-3.5" />
-              重新连接
-            </Button>
-          ) : null}
+          {reconnectButton}
         </div>
       </CardHeader>
 
       <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-5 pb-5 pt-0">
-        <ApiErrorReporter error={error} title="日志读取失败" source="operations" />
-
-        <div
-          ref={logBoxRef}
-          className={cn(
-            "operation-log-scrollbar min-h-0 flex-1 overflow-y-auto rounded-xl border border-border/60 bg-background/72 p-3 font-mono text-xs",
-            logClassName,
-          )}
-        >
-          {items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{operationId ? "暂无日志。" : "尚未开始。"}</p>
-          ) : (
-            <div className="space-y-2">
-              {items.map((item, index) => {
-                const message = item.message ?? "";
-                const dataText = item.data && Object.keys(item.data).length > 0 ? safeStringify(item.data) : "";
-
-                return (
-                  <div
-                    key={`${item.seq}-${index}`}
-                    className={cn("rounded-lg border p-2", levelTone(item.level))}
-                  >
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                      <span className="text-primary">#{item.seq}</span>
-                      <span>{formatDateTime(item.at)}</span>
-                      <StatusBadge status={item.level ?? "info"} />
-                      {item.stage ? (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
-                          {item.stage}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    <pre className="mt-1 whitespace-pre-wrap break-words leading-relaxed">
-                      {renderHighlightedText(message, `msg-${item.seq}-${index}`)}
-                    </pre>
-
-                    {dataText ? (
-                      <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border border-border/45 bg-background/62 p-2 leading-relaxed text-muted-foreground">
-                        {renderHighlightedText(dataText, `data-${item.seq}-${index}`)}
-                      </pre>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {logContent}
       </CardContent>
     </Card>
   );
