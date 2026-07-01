@@ -1,5 +1,4 @@
 import type {
-  DebugAgentCommandEntry,
   DebugAgentProgressItem,
   DebugCandidate,
   DebugFrame,

@@ -43,7 +43,7 @@ export function DebugPageHeader({
     {
       key: "protocol",
       label: "协议",
-      value: display(viewModel.header.protocol),
+      value: display(viewModel.header.protocol, "未选择"),
       icon: Binary,
       tone: "text-sky-400 border-sky-500/25 bg-sky-500/10",
     },
@@ -64,7 +64,7 @@ export function DebugPageHeader({
     {
       key: "relatedLibraryFile",
       label: "关联库",
-      value: display(viewModel.header.relatedLibraryFile),
+      value: display(viewModel.header.relatedLibraryFile, "未解析"),
       icon: Link2,
       tone: "text-emerald-400 border-emerald-500/25 bg-emerald-500/10",
     },
@@ -91,7 +91,7 @@ export function DebugPageHeader({
         <div className="grid min-w-0 gap-2 self-start">
           <div className="grid gap-2 md:grid-cols-4">
             <HeaderStat icon={ActivitySquare} label="状态" value={display(viewModel.header.status)} />
-            <HeaderStat icon={Workflow} label="会话 / 操作" value={display(viewModel.header.sessionId || viewModel.header.operationId)} />
+            <HeaderStat icon={Workflow} label="会话 / 操作" value={display(viewModel.header.sessionId || viewModel.header.operationId, "未创建")} />
             <HeaderStat icon={ShieldAlert} label="最近更新" value={display(viewModel.header.updatedAt, "尚未刷新")} />
             <HeaderStat icon={ShieldAlert} label="调试策略" value={display(viewModel.header.debuggerMode, "崩溃证据归纳")} />
           </div>

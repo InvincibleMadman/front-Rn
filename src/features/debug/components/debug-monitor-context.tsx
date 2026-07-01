@@ -64,7 +64,7 @@ export function DebugMonitorContext({ context, workspaceRef }: { context: Monito
           icon={Radar}
           rows={[
             { label: "样本", value: context.artifactPath },
-            { label: "程序", value: context.binaryPath },
+            { label: "传输", value: context.transportType },
             { label: "模式", value: context.replayMode },
             { label: "目标", value: context.replayTarget || context.replayStatus },
           ]}
@@ -73,10 +73,10 @@ export function DebugMonitorContext({ context, workspaceRef }: { context: Monito
           title="目标"
           icon={PackageOpen}
           rows={[
+            { label: "程序", value: context.binaryPath },
             { label: "CWD", value: context.cwd },
             { label: "证据", value: context.evidenceMode },
             { label: "源码", value: context.sourceAvailable ? "就绪" : "缺失" },
-            { label: "分析", value: context.analysisMode },
           ]}
         />
         <Section
@@ -94,7 +94,7 @@ export function DebugMonitorContext({ context, workspaceRef }: { context: Monito
           icon={FolderTree}
           rows={[
             { label: "引用", value: workspaceRef || undefined },
-            { label: "传输", value: context.transportType },
+            { label: "分析", value: context.analysisMode },
             { label: "回放状态", value: context.replayStatus },
             { label: "关联库", value: context.relatedLibraryFile },
           ]}
