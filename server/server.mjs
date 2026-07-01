@@ -387,16 +387,48 @@ function bootstrapAdmin() {
 }
 
 function bootstrapDefaultNode() {
-  const count = db.prepare("SELECT COUNT(*) AS c FROM nodes").get().c;
-  if (count > 0) return;
   const now = nowIso();
   const nodeId = normalizeNodeId(defaultNodeId);
   const baseUrl = normalizeBaseUrl(defaultNodeBaseUrl);
   const secret = normalizeNodeSecret(defaultNodeSecret);
-  db.prepare(
-    "INSERT INTO nodes(node_id, name, base_url, description, enabled, node_secret, created_by, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
-  ).run(nodeId, defaultNodeName, baseUrl, "Auto-created default FastAPI backend node", 1, secret, "system", now, now);
-  logInfo("node", "ready", `default node ${nodeId}`, baseUrl);
+  const description = "Auto-created default FastAPI backend node";
+  const existing = nodeRowById(nodeId);
+  if (!existing) {
+    db.prepare(
+      "INSERT INTO nodes(node_id, name, base_url, description, enabled, node_secret, created_by, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+    ).run(nodeId, defaultNodeName, baseUrl, description, 1, secret, "system", now, now);
+    logInfo("node", "ready", `default node ${nodeId}`, baseUrl);
+    return;
+  }
+
+  const isSystemManaged = String(existing.created_by || "") === "system" || String(existing.description || "") === description;
+  if (!isSystemManaged) return;
+
+  const desired = {
+    name: defaultNodeName,
+    base_url: baseUrl,
+    description,
+    enabled: 1,
+    node_secret: secret,
+  };
+  const changed =
+    String(existing.name || "") !== desired.name ||
+    String(existing.base_url || "") !== desired.base_url ||
+    String(existing.description || "") !== desired.description ||
+    Number(existing.enabled ? 1 : 0) !== desired.enabled ||
+    String(existing.node_secret || "") !== desired.node_secret;
+  if (!changed) return;
+
+  db.prepare("UPDATE nodes SET name=?, base_url=?, description=?, enabled=?, node_secret=?, updated_at=? WHERE node_id=?").run(
+    desired.name,
+    desired.base_url,
+    desired.description,
+    desired.enabled,
+    desired.node_secret,
+    now,
+    nodeId,
+  );
+  logInfo("node", "ready", `reconciled default node ${nodeId}`, desired.base_url);
 }
 
 bootstrapAdmin();

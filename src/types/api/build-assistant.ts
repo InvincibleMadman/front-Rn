@@ -72,6 +72,7 @@ export interface BuildPlanCreatePayload {
   source_root?: string;
   build_root_ref?: string;
   build_root?: string;
+  binary_output_ref?: string;
   build_system?: string;
   compiler?: string;
   build_type?: string;
@@ -116,6 +117,7 @@ export interface BuildPlan {
   build_suggestions?: BuildSuggestion[];
   selected_suggestion_id?: string | null;
   build_root_ref?: string;
+  binary_output_ref?: string;
 }
 
 export interface TargetCandidate {

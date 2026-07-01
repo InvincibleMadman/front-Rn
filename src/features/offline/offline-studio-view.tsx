@@ -1110,6 +1110,9 @@ export function OfflineStudioView(): JSX.Element {
     "执行插桩",
     "创建 Fuzz 任务",
   ];
+  const workspaceExampleProtocol = buildProtocol || riskAnalyzeForm.watch("protocol") || seedsForm.watch("protocol") || "bacnet";
+  const workspaceExampleRef = `workspace://${workspaceExampleProtocol}/source/`;
+  const workspaceExampleDir = `workspace/protocols/${workspaceExampleProtocol}/source/`;
 
   return (
     <div className="space-y-6">
@@ -1136,7 +1139,9 @@ export function OfflineStudioView(): JSX.Element {
       <Card>
         <CardHeader>
           <CardTitle>当前准备上下文</CardTitle>
-          <CardDescription>推荐优先使用 `workspace://` 引用；旧字段路径仍保持兼容。</CardDescription>
+          <CardDescription>
+            推荐优先使用 `workspace://` 引用；旧字段路径仍保持兼容。示例：`{workspaceExampleRef}` 对应协议工作区目录下的 `{workspaceExampleDir}`。
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-border/60 bg-background/45 p-4">

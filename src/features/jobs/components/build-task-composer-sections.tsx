@@ -15,6 +15,7 @@ export interface BuildTaskComposerState {
   source_root: string;
   build_root_ref: string;
   build_root: string;
+  binary_output_ref: string;
   build_system: string;
   compiler: string;
   build_type: string;
@@ -85,6 +86,9 @@ export function BuildTaskComposerSections({
                   </FormField>
                   <FormField label="build_root_ref">
                     <Input value={value.build_root_ref} onChange={(event) => onChange({ build_root_ref: event.target.value })} placeholder="workspace://legacy-default/build/" />
+                  </FormField>
+                  <FormField label="binary_output_ref" description="可选。留空时归档到当前协议的 binaries 类别目录；支持 workspace://<protocol>/... 或当前协议快捷写法，如 binaries/asan/。">
+                    <Input value={value.binary_output_ref} onChange={(event) => onChange({ binary_output_ref: event.target.value })} placeholder="binaries/asan/ 或 workspace://legacy-default/binaries/asan/" />
                   </FormField>
                   <FormField label="build_root">
                     <Input value={value.build_root} onChange={(event) => onChange({ build_root: event.target.value })} placeholder="可选，仅用于说明或兼容旧输入" />
@@ -163,6 +167,9 @@ export function BuildTaskComposerSections({
                   </FormField>
                   <FormField label="build_root_ref">
                     <Input value={value.build_root_ref} onChange={(event) => onChange({ build_root_ref: event.target.value })} placeholder="workspace://legacy-default/build/" />
+                  </FormField>
+                  <FormField label="binary_output_ref" description="可选。留空时归档到当前协议的 binaries 类别目录；支持 workspace://<protocol>/... 或当前协议快捷写法，如 binaries/asan/。">
+                    <Input value={value.binary_output_ref} onChange={(event) => onChange({ binary_output_ref: event.target.value })} placeholder="binaries/asan/ 或 workspace://legacy-default/binaries/asan/" />
                   </FormField>
                   <FormField label="command lines" description="前端会先做简单过滤，后端仍会再做强校验。">
                     <Textarea value={value.direct_commands_text} onChange={(event) => onChange({ direct_commands_text: event.target.value })} rows={10} placeholder={"cmake -S . -B build\ncmake --build build --parallel 4"} />

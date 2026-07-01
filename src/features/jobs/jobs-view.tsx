@@ -227,6 +227,7 @@ export function JobsView(): JSX.Element {
     source_root: "",
     build_root_ref: "",
     build_root: "",
+    binary_output_ref: "",
     build_system: "cmake",
     compiler: "afl-clang-fast",
     build_type: "RelWithDebInfo",
@@ -300,6 +301,7 @@ export function JobsView(): JSX.Element {
       protocol: probe.protocol || current.protocol,
       source_ref: current.source_ref || probe.source_ref || "",
       build_root_ref: current.build_root_ref || probe.build_root_ref || "",
+      binary_output_ref: current.binary_output_ref || "",
       build_system: current.build_system || uniqueBuildSystems(probe)[0] || "cmake",
       compiler: current.compiler || probe.allowed_compilers?.[0] || "afl-clang-fast",
     }));
@@ -415,6 +417,7 @@ export function JobsView(): JSX.Element {
     source_root: buildForm.source_root || undefined,
     build_root_ref: buildForm.build_root_ref || undefined,
     build_root: buildForm.build_root || undefined,
+    binary_output_ref: buildForm.binary_output_ref || undefined,
     build_system: buildForm.build_system || undefined,
     compiler: buildForm.compiler || undefined,
     build_type: buildForm.build_type || undefined,
@@ -564,6 +567,7 @@ export function JobsView(): JSX.Element {
     { label: "compiler", value: buildForm.compiler || "—" },
     { label: "target io", value: buildForm.target_io_hint },
     { label: "expected outputs", value: String(splitLines(buildForm.expected_outputs_text).length) },
+    { label: "binary output", value: buildForm.binary_output_ref || "默认 binaries/" },
   ];
 
   const fuzzCommandBlocks = useMemo(() => {
