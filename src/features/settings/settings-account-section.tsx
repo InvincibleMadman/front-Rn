@@ -53,7 +53,7 @@ export function SettingsAccountSection({
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <SettingsInfoGroup title="当前账号" description="`/settings?tab=account` 直接作为用户中心入口。">
+        <SettingsInfoGroup title="当前账号" description="简化实现的用户模型访问控制">
           <SettingsInfoRow
             icon={<UserCircle2 className="size-4" />}
             label="Username"
@@ -77,7 +77,7 @@ export function SettingsAccountSection({
           />
         </SettingsInfoGroup>
 
-        <SettingsInfoGroup title="修改密码" description="紧凑行式表单，保持 scrypt + session 续签。">
+        <SettingsInfoGroup title="修改密码" description="新用户默认密码需要管理员设置分发">
           <form className="space-y-2.5" onSubmit={submitPassword}>
             <SettingsEditRow
               label="Current password"

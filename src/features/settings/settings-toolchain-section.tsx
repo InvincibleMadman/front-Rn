@@ -54,13 +54,13 @@ export function SettingsToolchainSection({
       {configError ? (
         <SectionUnavailableNotice
           title="工具链摘要暂不可用"
-          description="当前节点的工具解析摘要未完整返回，详情已转入全局弹窗与底部日志栏。"
+          description="当前节点的工具解析摘要未完整返回"
         />
       ) : null}
       {!hasSelectedNode ? <MissingNodeNotice /> : null}
 
       <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-        <SettingsInfoGroup title="Resolved summary" description="先看解析结果，再调整路径。">
+        <SettingsInfoGroup title="Resolved summary" description="主机工具环境解析结果">
           <SettingsInfoRow
             icon={<CheckCircle2 className="size-4" />}
             label="Toolchain readiness"
@@ -85,7 +85,7 @@ export function SettingsToolchainSection({
           </div>
         </SettingsInfoGroup>
 
-        <SettingsInfoGroup title="路径配置" description="路径配置与运行时发现状态并排展示。">
+        <SettingsInfoGroup title="路径配置" description="路径配置与运行时发现状态">
           <SettingsEditRow
             label="AFL++ fuzzer"
             control={<Input {...form.register("paths_afl_fuzz")} />}

@@ -759,7 +759,7 @@ export function SettingsView(): JSX.Element {
           <summary className="settings-json-foldout__summary">
             <div>
               <CardTitle>当前配置 JSON / 调试信息</CardTitle>
-              <CardDescription className="mt-1">保留底部折叠区，用于对照节点配置、system info、capabilities 与 BFF 安全摘要原始返回。</CardDescription>
+              <CardDescription className="mt-1">原始返回JSON，用于调试对照节点配置、system info、capabilities 与 BFF 安全摘要原始返回</CardDescription>
             </div>
             <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1 text-xs text-muted-foreground transition-colors group-open:bg-primary/10 group-open:text-primary">
               <span className="group-open:hidden">展开</span>

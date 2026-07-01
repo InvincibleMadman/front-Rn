@@ -72,7 +72,7 @@ export function SettingsSecuritySection({
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <SettingsInfoGroup title="Session / CSRF" description="BFF 登录边界保持 HttpOnly session 与 CSRF 约束。">
+        <SettingsInfoGroup title="Session / CSRF" description="HttpOnly session 与 CSRF 约束">
           <SettingsInfoRow
             icon={<ShieldCheck className="size-4" />}
             label="Session cookie"
@@ -97,7 +97,7 @@ export function SettingsSecuritySection({
           />
         </SettingsInfoGroup>
 
-        <SettingsInfoGroup title="登录保护" description="失败节流与 bootstrap admin 摘要。">
+        <SettingsInfoGroup title="登录保护" description="失败节流与 bootstrap admin 摘要">
           <SettingsInfoRow
             icon={<ShieldCheck className="size-4" />}
             label="Login limiter"
@@ -126,7 +126,7 @@ export function SettingsSecuritySection({
           />
         </SettingsInfoGroup>
 
-        <SettingsInfoGroup title="Control plane" description="节点签名鉴权边界与 token 过期策略。">
+        <SettingsInfoGroup title="Control plane" description="节点签名鉴权边界与 token 过期策略">
           <SettingsInfoRow
             icon={<ShieldCheck className="size-4" />}
             label="Control plane"
@@ -149,7 +149,7 @@ export function SettingsSecuritySection({
           />
         </SettingsInfoGroup>
 
-        <SettingsInfoGroup title="边界声明" description="安全页明确只保留 Web BFF + /api/v1/*。">
+        <SettingsInfoGroup title="边界声明" description="API边界状态，是否使用现代化v1接口">
           <SettingsInfoRow
             icon={<ShieldCheck className="size-4" />}
             label="Legacy compat routes"

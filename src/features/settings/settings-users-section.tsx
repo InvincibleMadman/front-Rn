@@ -63,7 +63,7 @@ export function SettingsUsersSection({
 
       <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
         <div className="space-y-4">
-          <SettingsInfoGroup title="用户摘要" description="管理员与普通用户统计。">
+          <SettingsInfoGroup title="用户摘要" description="用户模型统计摘要">
             <SettingsInfoRow
               icon={<Users className="size-4" />}
               label="用户总数"
@@ -84,7 +84,7 @@ export function SettingsUsersSection({
             />
           </SettingsInfoGroup>
 
-          <SettingsInfoGroup title="新增用户" description="紧凑两列表单，不引入额外认证系统。">
+          <SettingsInfoGroup title="新增用户" description="仅有管理员可进行此操作，不能随意注册">
             <form className="space-y-2.5" onSubmit={submitCreateUser}>
               <div className="grid gap-2.5 md:grid-cols-2">
                 <SettingsEditRow
@@ -132,7 +132,7 @@ export function SettingsUsersSection({
           </SettingsInfoGroup>
         </div>
 
-        <SettingsInfoGroup title="用户列表" description="管理员在系统设置内完成最小用户管理。">
+        <SettingsInfoGroup title="用户列表" description="仅管理员可见的最小化用户管理">
           {usersLoading ? (
             <div className="rounded-xl border border-border/60 bg-background/50 px-4 py-6 text-sm text-muted-foreground">正在加载用户列表...</div>
           ) : users.length === 0 ? (

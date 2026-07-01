@@ -41,40 +41,40 @@ export function SettingsBuildSection({
       {configError ? (
         <SectionUnavailableNotice
           title="构建配置摘要暂不可用"
-          description="当前节点的构建与调试配置未完整返回，详情已转入全局弹窗与底部日志栏。"
+          description="当前节点的构建与调试配置未完整返回"
         />
       ) : null}
       {!hasSelectedNode ? <MissingNodeNotice /> : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <SettingsInfoGroup title="开关项" description="开关类配置统一放在紧凑 toggle rows。">
+        <SettingsInfoGroup title="开关项" description="当前节点服务功能子项控制面">
           <SettingsEditRow
             label="Build enabled"
-            description="总构建助手开关。"
+            description="总构建助手开关"
             control={<Switch checked={form.watch("build_enabled")} onCheckedChange={(checked) => form.setValue("build_enabled", checked)} />}
             status={<SettingsValueChip tone={form.watch("build_enabled") ? "success" : "warning"}>{form.watch("build_enabled") ? "On" : "Off"}</SettingsValueChip>}
           />
           <SettingsEditRow
             label="LLM assist"
-            description="允许构建助手调用 LLM。"
+            description="允许构建助手调用 LLM"
             control={<Switch checked={form.watch("build_allow_llm_assist")} onCheckedChange={(checked) => form.setValue("build_allow_llm_assist", checked)} />}
             status={<SettingsValueChip tone={form.watch("build_allow_llm_assist") ? "success" : "default"}>{form.watch("build_allow_llm_assist") ? "Enabled" : "Disabled"}</SettingsValueChip>}
           />
           <SettingsEditRow
             label="Shell scripts"
-            description="默认建议关闭。"
+            description="默认建议关闭"
             control={<Switch checked={form.watch("build_allow_shell_scripts")} onCheckedChange={(checked) => form.setValue("build_allow_shell_scripts", checked)} />}
             status={<SettingsValueChip tone={form.watch("build_allow_shell_scripts") ? "warning" : "success"}>{form.watch("build_allow_shell_scripts") ? "Review" : "Safe default"}</SettingsValueChip>}
           />
           <SettingsEditRow
             label="Network replay"
-            description="调试器允许网络回放。"
+            description="调试器允许网络回放"
             control={<Switch checked={form.watch("debugger_allow_network_replay")} onCheckedChange={(checked) => form.setValue("debugger_allow_network_replay", checked)} />}
             status={<SettingsValueChip tone={form.watch("debugger_allow_network_replay") ? "warning" : "default"}>{form.watch("debugger_allow_network_replay") ? "Enabled" : "Disabled"}</SettingsValueChip>}
           />
         </SettingsInfoGroup>
 
-        <SettingsInfoGroup title="编译器与调试器" description="默认编译器、GDB 与超时配置。">
+        <SettingsInfoGroup title="编译器与调试器" description="默认编译器、GDB 与超时配置">
           <SettingsEditRow
             label="Default compiler"
             control={<Input {...form.register("build_default_compiler")} />}
@@ -99,7 +99,7 @@ export function SettingsBuildSection({
           />
         </SettingsInfoGroup>
 
-        <SettingsInfoGroup title="Compiler allowlist" description="每行一个可用 compiler。">
+        <SettingsInfoGroup title="Compiler allowlist" description="每行一个可用 compiler">
           <SettingsEditRow
             label="Allowed compilers"
             control={<Textarea rows={5} {...form.register("build_allowed_compilers_text")} />}
@@ -107,7 +107,7 @@ export function SettingsBuildSection({
           />
         </SettingsInfoGroup>
 
-        <SettingsInfoGroup title="Tool allowlist" description="每行一个可用工具名。">
+        <SettingsInfoGroup title="Tool allowlist" description="每行一个可用工具名">
           <SettingsEditRow
             label="Allowed tools"
             control={<Textarea rows={5} {...form.register("build_allowed_tools_text")} />}
