@@ -126,7 +126,7 @@ export function Sidebar(): JSX.Element {
           {showExpandedContent ? (
             <div className="min-w-0">
               <p className="truncate text-[20px] font-semibold tracking-tight text-[hsl(var(--sidebar-text))]">
-                ICP Fuzz
+                ICPilot
               </p>
               <p className="truncate text-[13px] uppercase tracking-[0.18em] text-[hsl(var(--sidebar-text-subtle))]">
                 Console

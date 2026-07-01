@@ -157,11 +157,11 @@ const HOME_PROJECT_INTRO = {
   eyebrow: "Project Introduction",
   title: "工业控制协议模糊测试与崩溃定位平台",
   description:
-    "面向工控系统上线前验证场景，统一承载协议准备、任务编排、崩溃复现与证据链分析。",
+    "面向工控系统通信模块上线前验证场景，统一承载协议准备、任务编排、崩溃复现与证据链分析。",
   highlights: [
     "聚合协议准备、Fuzz 任务、漏洞回溯与智能调试链路",
-    "支持多节点调度、结构化 payload 提交与结果分层收束",
-    "适合在这里放置项目摘要、核心能力与部署价值说明",
+    "支持多种方式导入目标协议资产，利用系统提供的功能进行较全面的分析、测试",
+    "支持多节点调度、独立监控任务回显与结果分层收束",
   ],
   tags: ["Protocol Fuzzing", "Crash Replay", "Evidence Trace"],
 } as const;
@@ -1148,7 +1148,7 @@ export function HomeView(): JSX.Element {
                 <TerminalSquare className="size-6" />
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-[0.3em] text-[hsl(var(--text-tertiary))]">ICP Fuzz</p>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-[hsl(var(--text-tertiary))]">ICPilot</p>
                 <p className="mt-1 text-base font-medium text-[hsl(var(--text-secondary))]">
                   Industrial Control Protocol Fuzzing Console
                 </p>
@@ -1186,7 +1186,7 @@ export function HomeView(): JSX.Element {
               </div>
 
               <h1 className="mt-7 text-5xl font-bold tracking-[-0.05em] text-[hsl(var(--text-primary))] sm:text-6xl lg:text-7xl">
-                ICP Fuzz
+                ICPilot
               </h1>
 
               <p className="mt-5 text-xl text-[hsl(var(--text-secondary))] sm:text-2xl">

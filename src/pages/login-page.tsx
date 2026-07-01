@@ -136,7 +136,7 @@ export function LoginPage(): JSX.Element {
               <div className="flex size-[1.88rem] items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
                 <ShieldCheck className="size-[1.38rem]" />
               </div>
-              <span className="text-[0.82rem] font-semibold uppercase tracking-[0.24em] text-foreground/90">ICP Fuzz</span>
+              <span className="text-[0.82rem] font-semibold uppercase tracking-[0.24em] text-foreground/90">ICPilot</span>
             </div>
           </div>
 

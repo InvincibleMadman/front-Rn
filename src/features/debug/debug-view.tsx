@@ -45,9 +45,9 @@ export function DebugView(): JSX.Element {
   const [selectedCandidatePath, setSelectedCandidatePath] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    document.title = "ICP Fuzz";
+    document.title = "ICPilot";
     return () => {
-      document.title = "ICP Fuzz";
+      document.title = "ICPilot";
     };
   }, []);
 
