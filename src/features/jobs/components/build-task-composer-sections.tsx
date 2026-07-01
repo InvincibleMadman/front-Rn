@@ -1,4 +1,5 @@
 import { FormField } from "@/components/common/form-field";
+import { ProtocolComboInput } from "@/components/common/protocol-combo-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -39,12 +40,14 @@ const targetIoOptions = ["file_or_stdin", "network_or_server", "unknown"] as con
 export function BuildTaskComposerSections({
   value,
   onChange,
+  protocols,
   buildSystems,
   compilers,
   directCommandSanitize,
 }: {
   value: BuildTaskComposerState;
   onChange: (patch: Partial<BuildTaskComposerState>) => void;
+  protocols: string[];
   buildSystems: string[];
   compilers: string[];
   directCommandSanitize: SanitizedBuildCommandsResult;
@@ -66,7 +69,12 @@ export function BuildTaskComposerSections({
                 <CardHeader className="pb-3"><CardTitle className="text-base">源码与构建目录</CardTitle></CardHeader>
                 <CardContent className="grid gap-4 md:grid-cols-2">
                   <FormField label="protocol">
-                    <Input value={value.protocol} onChange={(event) => onChange({ protocol: event.target.value })} placeholder="legacy-default" />
+                    <ProtocolComboInput
+                      value={value.protocol}
+                      options={protocols}
+                      placeholder="输入并选择已有协议"
+                      onValueChange={(next) => onChange({ protocol: next })}
+                    />
                   </FormField>
                   <FormField label="build system">
                     <Select value={value.build_system || (buildSystems[0] ?? "manual")} onValueChange={(next) => onChange({ build_system: next })}>

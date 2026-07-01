@@ -17,7 +17,6 @@ import {
   Square,
   UploadCloud,
   Wand2,
-  ChevronDown,
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/page-header";
@@ -31,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { JsonViewer } from "@/components/common/json-viewer";
 import { OperationLogPanel } from "@/components/common/operation-log-panel";
+import { ProtocolComboInput, resolveExistingProtocol } from "@/components/common/protocol-combo-input";
 import { RiskAnalysisSummary } from "@/components/common/risk-analysis-summary";
 import { InstrumentationReportView } from "@/components/common/instrumentation-report-view";
 import { ApiErrorReporter } from "@/components/common/api-error-alert";
@@ -275,14 +275,6 @@ function scopeDisplay(scope: ScopeName, relativePath = "", trailingSlash = false
   return trailingSlash ? `${scope}/${cleaned.replace(/\/+$/, "")}/` : `${scope}/${cleaned}`;
 }
 
-function resolveExistingProtocol(value: string, options: string[]): string | null {
-  const current = normalizeProtocolText(value).toLowerCase();
-  if (!current) return null;
-  const matched = options.find((item) => item.trim().toLowerCase() === current);
-  return matched ? matched.trim() : null;
-}
-
-
 function buildProtocolAssetBindings(protocol?: string | null): ProtocolAssetBindings | null {
   const normalizedProtocol = normalizeProtocolText(protocol);
   if (!normalizedProtocol) return null;
@@ -456,133 +448,6 @@ async function uploadRiskJsonFile({
   );
 
   return response.data;
-}
-
-function ProtocolComboInput({
-  value,
-  options,
-  placeholder = "输入并匹配已有协议名",
-  onValueChange,
-  onCommit,
-  onOpen,
-}: {
-  value: string;
-  options: string[];
-  placeholder?: string;
-  onValueChange: (value: string) => void;
-  onCommit?: (value: string) => void | Promise<void>;
-  onOpen?: () => void | Promise<void>;
-}): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const current = normalizeProtocolText(value);
-  const matched = resolveExistingProtocol(current, options);
-
-  const filtered = useMemo(() => {
-    const keyword = current.toLowerCase();
-    const source = options.map((item) => item.trim()).filter(Boolean);
-    const unique = Array.from(new Set(source));
-
-    if (!keyword) return unique.slice(0, 12);
-
-    return unique
-      .filter((item) => item.toLowerCase().includes(keyword))
-      .slice(0, 12);
-  }, [current, options]);
-
-  const toggleDropdown = (): void => {
-    setOpen((prev) => {
-      const next = !prev;
-      if (next) void onOpen?.();
-      return next;
-    });
-  };
-
-  const openDropdown = (): void => {
-    setOpen(true);
-    void onOpen?.();
-  };
-
-  const commit = async (nextValue?: string): Promise<void> => {
-    const normalized = normalizeProtocolText(nextValue ?? current);
-    const exact = resolveExistingProtocol(normalized, options);
-    if (!exact) {
-      setOpen(false);
-      return;
-    }
-
-    onValueChange(exact);
-    setOpen(false);
-    await onCommit?.(exact);
-  };
-
-  return (
-    <div className="relative w-full overflow-visible">
-      <Input
-        value={value}
-        placeholder={placeholder}
-        className={cn(
-          "pr-10 focus-visible:ring-inset",
-          current && !matched && "border-warning/60 text-warning focus-visible:ring-warning/40",
-        )}
-        onChange={(event) => {
-          onValueChange(event.target.value);
-          openDropdown();
-        }}
-        onBlur={() => {
-          window.setTimeout(() => {
-            setOpen(false);
-            void commit();
-          }, 120);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            void commit(current);
-          }
-
-          if (event.key === "Escape") {
-            setOpen(false);
-          }
-        }}
-      />
-      <button
-        type="button"
-        className="absolute inset-y-0 right-2 inline-flex items-center justify-center rounded-md px-1 text-muted-foreground hover:text-foreground"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={toggleDropdown}
-        aria-label="展开协议列表"
-      >
-        <ChevronDown className="size-4" />
-      </button>
-
-      {open ? (
-        <div className="absolute inset-x-0 top-[calc(100%+0.25rem)] z-50 max-h-60 w-full overflow-y-auto rounded-[var(--radius-lg)] border border-border bg-popover p-1 shadow-console">
-          {filtered.length ? (
-            filtered.map((protocol) => (
-              <button
-                key={protocol}
-                type="button"
-                className="flex w-full min-w-0 items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => void commit(protocol)}
-              >
-                <span className="min-w-0 truncate">{protocol}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">已有</span>
-              </button>
-            ))
-          ) : (
-            <div className="px-3 py-2 text-sm text-muted-foreground">
-              暂无匹配协议
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      {current && !matched ? (
-        <p className="mt-2 text-xs text-warning">必须完全匹配已有协议资产名后才能提交。</p>
-      ) : null}
-    </div>
-  );
 }
 
 export function OfflineStudioView(): JSX.Element {
@@ -1112,7 +977,6 @@ export function OfflineStudioView(): JSX.Element {
   ];
   const workspaceExampleProtocol = buildProtocol || riskAnalyzeForm.watch("protocol") || seedsForm.watch("protocol") || "bacnet";
   const workspaceExampleRef = `workspace://${workspaceExampleProtocol}/source/`;
-  const workspaceExampleDir = `workspace/protocols/${workspaceExampleProtocol}/source/`;
 
   return (
     <div className="space-y-6">
@@ -1133,14 +997,14 @@ export function OfflineStudioView(): JSX.Element {
       <PageHeader
         eyebrow="协议准备工作台"
         title="协议准备工作台"
-        description="保留离线分析子功能，并新增 BuildPlan、BuildRun、LaunchProfile 的准备链路。"
+        description="模糊测试离线的分析功能，对协议已有资产进行处理增强模糊测试语义，产生的有价值信息可用于对协议多方面测试工作"
       />
 
       <Card>
         <CardHeader>
           <CardTitle>当前准备上下文</CardTitle>
           <CardDescription>
-            推荐优先使用 `workspace://` 引用；旧字段路径仍保持兼容。示例：`{workspaceExampleRef}` 对应协议工作区目录下的 `{workspaceExampleDir}`。
+            使用 `workspace://` 开头的虚拟路径索引文件 | 示例：`{workspaceExampleRef}`
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-3">
@@ -1610,34 +1474,38 @@ export function OfflineStudioView(): JSX.Element {
                 </form>
               </CardContent>
             </Card>
-            <div className="flex min-h-[400px] min-w-0 flex-col gap-4">
-              <div className="h-[24vh] min-h-[18vh] max-h-[30vh] shrink-0">
-                <OperationLogPanel
-                  operationId={operationIds["risk-analyze"]}
-                  running={riskAnalyzeMutation.isPending}
-                  title="当前动作"
-                  maxLines={120}
-                  pollIntervalMs={1000}
-                  variant="compact"
-                  eagerStart={false}
-                  note={cancelRequestedTabs["risk-analyze"] ? "已发送停止请求，当前已写出的分析结果会保留" : "仅捕获风险路径分析最近一次后端操作回显。"}
-                  className="h-full min-h-0"
-                  logClassName="bg-background/45"
-                />
-              </div>
+            <Card className="flex min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden">
+              <CardHeader className="border-b border-border/50">
+                <CardTitle>回显面板</CardTitle>
+                <CardDescription>实时动作和结果显示</CardDescription>
+              </CardHeader>
+              <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-5">
+                <div className="h-[24vh] min-h-[18vh] max-h-[30vh] shrink-0">
+                  <OperationLogPanel
+                    operationId={operationIds["risk-analyze"]}
+                    running={riskAnalyzeMutation.isPending}
+                    title="当前动作"
+                    maxLines={120}
+                    pollIntervalMs={1000}
+                    variant="compact"
+                    eagerStart={false}
+                    note={cancelRequestedTabs["risk-analyze"] ? "已发送停止请求，当前已写出的分析结果会保留" : "仅捕获风险路径分析最近一次后端操作回显。"}
+                    className="h-full min-h-0"
+                    logClassName="bg-background/45"
+                  />
+                </div>
 
-              <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <CardHeader className="shrink-0">
-                  <CardTitle>分析结果</CardTitle>
-                  <CardDescription>下方显示 pipeline 的 summary / findings / failed_chunks / warnings。</CardDescription>
-                </CardHeader>
-                <CardContent className="flex min-h-0 flex-1 flex-col">
+                <div className="flex min-h-0 flex-1 flex-col border-t border-border/50 pt-4">
+                  <div className="shrink-0 space-y-1">
+                    <CardTitle className="text-base">分析结果</CardTitle>
+                    <CardDescription>下方显示 pipeline 的 summary / findings / failed_chunks / warnings。</CardDescription>
+                  </div>
                   <div className="console-scrollbar min-h-0 flex-1 overflow-y-auto rounded-xl border border-border/60 bg-card/70 p-4">
                     <RiskAnalysisSummary data={liveRiskAnalyzeData ?? riskAnalyzeMutation.data ?? null} />
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 

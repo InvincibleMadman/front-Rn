@@ -1239,8 +1239,7 @@ export function DashboardView(): JSX.Element {
               跨节点运行任务分布
             </CardTitle>
             <CardDescription>
-              由 `/web-api/dashboard/overview` 聚合各节点 `/api/v1/jobs/summary`
-              返回。
+              前端BFF聚合各节点的摘要API信息
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1255,7 +1254,7 @@ export function DashboardView(): JSX.Element {
               跨节点 Crash 发现分布
             </CardTitle>
             <CardDescription>
-              Crash 是 Fuzz 发现结果，不表示平台异常或系统故障。
+              存储于本BFF数据库的记录
             </CardDescription>
           </CardHeader>
           <CardContent className="grid min-h-[17.5rem] gap-5 p-5 pt-0 lg:grid-cols-[minmax(10.5rem,11.5rem)_minmax(0,1fr)] lg:items-center">
@@ -1337,7 +1336,7 @@ export function DashboardView(): JSX.Element {
                       </div>
                     ) : (
                       <div className="flex h-full min-h-[7rem] items-center justify-center px-3 text-center text-sm text-muted-foreground">
-                        暂无其他节点 Crash 数据。
+                        暂无其他节点 Crash 数据
                       </div>
                     )}
                   </div>
@@ -1345,7 +1344,7 @@ export function DashboardView(): JSX.Element {
               </div>
             ) : (
               <div className="flex h-full items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-border/60 bg-background/55 px-4 text-center text-sm text-muted-foreground">
-                暂无跨节点 Crash 分布数据。
+                暂无跨节点 Crash 分布数据
               </div>
             )}
           </CardContent>
@@ -1360,13 +1359,13 @@ export function DashboardView(): JSX.Element {
               节点健康表
             </CardTitle>
             <CardDescription>
-              离线节点保留在表内，不让仪表盘崩溃或缺失结构。
+              节点系统相关属性的摘要
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {(overview?.nodes ?? []).length === 0 ? (
               <div className="rounded-[var(--radius-lg)] border border-border/50 bg-background/60 px-4 py-10 text-center text-sm text-muted-foreground">
-                暂无节点摘要数据。
+                暂无节点摘要数据
               </div>
             ) : (
               overview?.nodes.map((node) => (
@@ -1433,7 +1432,7 @@ export function DashboardView(): JSX.Element {
               当前节点协议资产概览
             </CardTitle>
             <CardDescription>
-              以当前节点协议资产图数据派生分类统计，不展示真实服务器路径。
+              单一节点的资产统计数据
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1450,7 +1449,7 @@ export function DashboardView(): JSX.Element {
               当前节点任务状态
             </CardTitle>
             <CardDescription>
-              基于当前节点 `jobs/summary.by_status` 的紧凑视图。
+              基于当前节点监控API的紧凑视图
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1465,13 +1464,13 @@ export function DashboardView(): JSX.Element {
               最近事件
             </CardTitle>
             <CardDescription>
-              当前节点与跨节点最近任务事件的降级汇总。
+              当前节点与跨节点最近任务事件的汇总
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {(overview?.cross_node.recent_events ?? []).length === 0 ? (
               <div className="rounded-[var(--radius-lg)] border border-border/50 bg-background/60 px-4 py-10 text-center text-sm text-muted-foreground">
-                暂无最近事件。
+                暂无最近事件
               </div>
             ) : (
               overview?.cross_node.recent_events.map((event, index) => (

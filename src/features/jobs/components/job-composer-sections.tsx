@@ -1,4 +1,5 @@
 import { FormField } from "@/components/common/form-field";
+import { ProtocolComboInput } from "@/components/common/protocol-combo-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -86,11 +87,13 @@ export function JobComposerSections({
         <CardHeader className="pb-3"><CardTitle className="text-base">运行目标与 LaunchProfile</CardTitle></CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <FormField label="protocol">
-            <Input list="jobs-protocol-list" value={value.protocol} onChange={(event) => onChange({ protocol: event.target.value })} placeholder="modbus" />
+            <ProtocolComboInput
+              value={value.protocol}
+              options={protocols}
+              placeholder="输入并选择已有协议"
+              onValueChange={(next) => onChange({ protocol: next })}
+            />
           </FormField>
-          <datalist id="jobs-protocol-list">
-            {protocols.map((item) => <option key={item} value={item} />)}
-          </datalist>
           <FormField label="launch profile">
             <Select value={value.launch_profile_id || "none"} onValueChange={(next) => onChange({ launch_profile_id: next === "none" ? "" : next })}>
               <SelectTrigger><SelectValue placeholder="选择 LaunchProfile" /></SelectTrigger>

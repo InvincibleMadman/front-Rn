@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Boxes, GitBranchPlus, Hammer, RefreshCw, TerminalSquare, Wand2, Wrench } from "lucide-react";
 import { ApiErrorReporter } from "@/components/common/api-error-alert";
+import { resolveExistingProtocol } from "@/components/common/protocol-combo-input";
 import { PageHeroBoard } from "@/components/layout/page-hero-board";
 import { dockLog } from "@/components/layout/dock";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -251,30 +252,44 @@ export function JobsView(): JSX.Element {
   }, [tab, composeMode]);
 
   const protocolsQuery = useQuery({ queryKey: ["protocols"], queryFn: protocolsApi.listProtocols, retry: 0 });
+  const jobsQuery = useQuery({ queryKey: ["jobs", query], queryFn: () => jobsApi.listJobs(query), refetchInterval: 5000 });
+  const summaryQuery = useQuery({ queryKey: ["jobs-summary", query], queryFn: () => jobsApi.requestSummary(query), refetchInterval: 5000 });
+  const jobs = jobsQuery.data ?? [];
+  const summary = summaryQuery.data;
+  const protocolOptions = useMemo(
+    () => Array.from(new Set([...(protocolsQuery.data ?? []), ...jobs.map((item) => item.protocol ?? "").filter(Boolean)])),
+    [jobs, protocolsQuery.data],
+  );
+  const selectedFuzzProtocol = useMemo(
+    () => resolveExistingProtocol(fuzzForm.protocol, protocolOptions) ?? "",
+    [fuzzForm.protocol, protocolOptions],
+  );
+  const selectedBuildProtocol = useMemo(
+    () => resolveExistingProtocol(buildForm.protocol, protocolOptions) ?? "",
+    [buildForm.protocol, protocolOptions],
+  );
   const fuzzProbeQuery = useQuery({
-    queryKey: ["build-probe", "fuzz", fuzzForm.protocol],
-    queryFn: () => buildAssistantApi.probe(fuzzForm.protocol),
-    enabled: Boolean(fuzzForm.protocol),
+    queryKey: ["build-probe", "fuzz", selectedFuzzProtocol],
+    queryFn: () => buildAssistantApi.probe(selectedFuzzProtocol),
+    enabled: Boolean(selectedFuzzProtocol),
     staleTime: 10_000,
   });
   const buildProbeQuery = useQuery({
-    queryKey: ["build-probe", "build", buildForm.protocol],
-    queryFn: () => buildAssistantApi.probe(buildForm.protocol),
-    enabled: Boolean(buildForm.protocol),
+    queryKey: ["build-probe", "build", selectedBuildProtocol],
+    queryFn: () => buildAssistantApi.probe(selectedBuildProtocol),
+    enabled: Boolean(selectedBuildProtocol),
     staleTime: 10_000,
   });
   const launchProfilesQuery = useQuery({
-    queryKey: ["launch-profiles", fuzzForm.protocol],
-    queryFn: () => buildAssistantApi.listLaunchProfiles(fuzzForm.protocol),
-    enabled: Boolean(fuzzForm.protocol),
+    queryKey: ["launch-profiles", selectedFuzzProtocol],
+    queryFn: () => buildAssistantApi.listLaunchProfiles(selectedFuzzProtocol),
+    enabled: Boolean(selectedFuzzProtocol),
   });
   const targetsQuery = useQuery({
-    queryKey: ["build-targets", fuzzForm.protocol],
-    queryFn: () => buildAssistantApi.listTargets(fuzzForm.protocol),
-    enabled: Boolean(fuzzForm.protocol),
+    queryKey: ["build-targets", selectedFuzzProtocol],
+    queryFn: () => buildAssistantApi.listTargets(selectedFuzzProtocol),
+    enabled: Boolean(selectedFuzzProtocol),
   });
-  const jobsQuery = useQuery({ queryKey: ["jobs", query], queryFn: () => jobsApi.listJobs(query), refetchInterval: 5000 });
-  const summaryQuery = useQuery({ queryKey: ["jobs-summary", query], queryFn: () => jobsApi.requestSummary(query), refetchInterval: 5000 });
   const monitorQuery = useQuery({
     queryKey: ["jobs-monitor-overview", selectedMonitorJobId, query.protocol, query.status],
     queryFn: () => jobsApi.getMonitorOverview({ job_id: selectedMonitorJobId, protocol: query.protocol, status: query.status }),
@@ -312,12 +327,6 @@ export function JobsView(): JSX.Element {
     setFuzzForm((current) => (current.risk_schedule_enabled ? { ...current, risk_schedule_enabled: false } : current));
   }, [fuzzForm.risk_feedback_enabled]);
 
-  const jobs = jobsQuery.data ?? [];
-  const summary = summaryQuery.data;
-  const protocolOptions = useMemo(
-    () => Array.from(new Set([...(protocolsQuery.data ?? []), ...jobs.map((item) => item.protocol ?? "").filter(Boolean)])),
-    [jobs, protocolsQuery.data],
-  );
   const nodeOptions = useMemo(
     () => Array.from(new Set(jobs.map((item) => String((item.request as Record<string, unknown> | undefined)?.node_name ?? "未指定")).filter(Boolean))),
     [jobs],
@@ -687,6 +696,7 @@ export function JobsView(): JSX.Element {
                     <BuildTaskComposerSections
                       value={buildForm}
                       onChange={(patch) => setBuildForm((current) => ({ ...current, ...patch }))}
+                      protocols={protocolOptions}
                       buildSystems={uniqueBuildSystems(buildProbeQuery.data)}
                       compilers={buildProbeQuery.data?.allowed_compilers?.length ? buildProbeQuery.data.allowed_compilers : ["afl-clang-fast", "afl-cc", "clang", "clang++", "gcc", "g++"]}
                       directCommandSanitize={sanitizedDirectCommands}

@@ -155,7 +155,7 @@ const HOME_DEMO_SCREENS: DemoScreen[] = [
 
 const HOME_PROJECT_INTRO = {
   eyebrow: "Project Introduction",
-  title: "工业控制协议模糊测试与崩溃定位平台",
+  title: "工业控制协议模糊测试与漏洞验证平台",
   description:
     "面向工控系统通信模块上线前验证场景，统一承载协议准备、任务编排、崩溃复现与证据链分析。",
   highlights: [
@@ -1190,7 +1190,7 @@ export function HomeView(): JSX.Element {
               </h1>
 
               <p className="mt-5 text-xl text-[hsl(var(--text-secondary))] sm:text-2xl">
-                工业控制协议模糊测试与崩溃定位平台
+                工业控制协议模糊测试与漏洞验证平台
               </p>
 
               <p className="mt-3 text-[15px] uppercase tracking-[0.24em] text-[hsl(var(--text-tertiary))]">

@@ -46,7 +46,7 @@ export function Topbar(): JSX.Element {
           </p>
           <div className="flex min-w-0 items-center gap-3">
             <h2 className="truncate text-[26px] font-semibold tracking-tight">
-              ICS 协议模糊测试系统
+              工控协议模糊测试平台
             </h2>
             <span className="hidden rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground lg:inline-flex">
               POWERED BY ICPilot-AFL

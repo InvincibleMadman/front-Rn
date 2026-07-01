@@ -567,7 +567,7 @@ export function buildIdleMonitorViewModel(protocol = ""): MonitorViewModel {
       focusFrame: "未定位",
       relatedLibraryFile: "未解析",
       status: "待启动",
-      statusDescription: "当前还没有加载具体调试会话；监控页会先把实时检查器骨架全部渲染出来。",
+      statusDescription: "当前还没有加载具体调试会话",
       debuggerMode: "Crash 证据归纳",
       sessionId: undefined,
       operationId: undefined,
