@@ -144,9 +144,11 @@ function JsonNode({
 export function JsonViewer({
   data,
   compact = false,
+  compactContainerClassName,
 }: {
   data: unknown;
   compact?: boolean;
+  compactContainerClassName?: string;
 }): JSX.Element {
   const content = (
     <div className={cn("p-4", compact && "p-0")}>
@@ -155,7 +157,11 @@ export function JsonViewer({
   );
 
   if (compact) {
-    return content;
+    return (
+      <div className={cn("min-h-0", compactContainerClassName)}>
+        {content}
+      </div>
+    );
   }
 
   return (

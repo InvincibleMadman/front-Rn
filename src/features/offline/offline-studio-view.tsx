@@ -470,6 +470,7 @@ export function OfflineStudioView(): JSX.Element {
   const [cancelRequestedTabs, setCancelRequestedTabs] = useState<Partial<Record<OfflineTab, boolean>>>({});
   const [cancelingOperationId, setCancelingOperationId] = useState<string | null>(null);
   const [protocolPreviewReadyOperationId, setProtocolPreviewReadyOperationId] = useState<string | null>(null);
+  const [stickyProtocolPreviewData, setStickyProtocolPreviewData] = useState<unknown>({ status: "idle" });
 
   const protocolsQuery = useQuery({
     queryKey: ["protocols"],
@@ -658,6 +659,7 @@ export function OfflineStudioView(): JSX.Element {
     mutationFn: offlineApi.protocolAnalyze,
     onMutate: () => {
       setProtocolPreviewReadyOperationId(null);
+      setStickyProtocolPreviewData({ status: "running" });
     },
     onSuccess: async (data: ProtocolAnalyzeResponse, variables) => {
       const specPath = protocolPrimaryPathFromResponse(data);
@@ -871,11 +873,12 @@ export function OfflineStudioView(): JSX.Element {
   }, [allKbEntries, selectedKbEntryId]);
 
   const protocolSpecPreviewQuery = useQuery({
-    queryKey: ["offline", "protocol-spec-preview", protocolAssets?.specFileRef, protocolPreviewReadyOperationId],
+    queryKey: ["offline", "protocol-spec-preview", protocolAssets?.specFileRef, operationIds.protocol, protocolPreviewReadyOperationId],
     queryFn: () => loadWorkspacePreviewByRef(protocolAssets?.specFileRef),
-    enabled: Boolean(protocolAssets?.specFileRef) && Boolean(protocolPreviewReadyOperationId),
+    enabled: Boolean(protocolAssets?.specFileRef) && (Boolean(operationIds.protocol) || Boolean(protocolPreviewReadyOperationId)),
     retry: false,
     refetchOnWindowFocus: false,
+    refetchInterval: protocolMutation.isPending || Boolean(protocolPreviewReadyOperationId) ? 1200 : false,
   });
 
   const seedsOutputFilesQuery = useQuery({
@@ -896,10 +899,9 @@ export function OfflineStudioView(): JSX.Element {
     refetchInterval: riskAnalyzeMutation.isPending ? 1200 : false,
   });
 
-  const protocolPreviewData = useMemo(
+  const protocolMutationFallbackData = useMemo(
     () =>
-      parsePreviewContent(protocolSpecPreviewQuery.data) ??
-      (protocolMutation.data
+      protocolMutation.data
         ? {
             ...protocolMutation.data,
             frontend_reference: {
@@ -908,9 +910,53 @@ export function OfflineStudioView(): JSX.Element {
               relatedPaths: protocolRelatedPathsFromResponse(protocolMutation.data),
             },
           }
-        : { status: "idle" }),
-    [protocolAssets?.specFileRef, protocolMutation.data, protocolSpecPreviewQuery.data],
+        : null,
+    [protocolAssets?.specFileRef, protocolMutation.data],
   );
+
+  const parsedProtocolPreviewData = useMemo(
+    () => parsePreviewContent(protocolSpecPreviewQuery.data),
+    [protocolSpecPreviewQuery.data],
+  );
+
+  const hasStructuredProtocolPreview = useMemo(
+    () => Boolean(parsedProtocolPreviewData) && typeof parsedProtocolPreviewData === "object" && !Array.isArray(parsedProtocolPreviewData),
+    [parsedProtocolPreviewData],
+  );
+
+  useEffect(() => {
+    if (hasStructuredProtocolPreview) {
+      setStickyProtocolPreviewData(parsedProtocolPreviewData);
+      return;
+    }
+
+    if (protocolMutationFallbackData) {
+      setStickyProtocolPreviewData((current) => {
+        if (current && typeof current === "object" && !Array.isArray(current) && "frontend_reference" in (current as Record<string, unknown>)) {
+          return current;
+        }
+        return protocolMutationFallbackData;
+      });
+      return;
+    }
+
+    if (!operationIds.protocol && !protocolPreviewReadyOperationId && !protocolMutation.isPending) {
+      setStickyProtocolPreviewData({ status: "idle" });
+    }
+  }, [
+    hasStructuredProtocolPreview,
+    operationIds.protocol,
+    parsedProtocolPreviewData,
+    protocolMutation.isPending,
+    protocolMutationFallbackData,
+    protocolPreviewReadyOperationId,
+  ]);
+
+  const protocolPreviewData = useMemo(() => {
+    if (hasStructuredProtocolPreview) return parsedProtocolPreviewData;
+    if (stickyProtocolPreviewData) return stickyProtocolPreviewData;
+    return { status: protocolMutation.isPending ? "running" : "idle" };
+  }, [hasStructuredProtocolPreview, parsedProtocolPreviewData, protocolMutation.isPending, stickyProtocolPreviewData]);
 
   const liveSeedItems = useMemo(
     () =>
@@ -1186,7 +1232,7 @@ export function OfflineStudioView(): JSX.Element {
                       logClassName="bg-background/45"
                     />
                   </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
+                  <div className="console-scrollbar min-h-0 max-h-[36rem] flex-1 overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
                     <JsonViewer data={protocolPreviewData} compact />
                   </div>
                 </CardContent>
@@ -1500,7 +1546,7 @@ export function OfflineStudioView(): JSX.Element {
                     <CardTitle className="text-base">分析结果</CardTitle>
                     <CardDescription>下方显示 pipeline 的 summary / findings / failed_chunks / warnings。</CardDescription>
                   </div>
-                  <div className="console-scrollbar min-h-0 flex-1 overflow-y-auto rounded-xl border border-border/60 bg-card/70 p-4">
+                  <div className="console-scrollbar min-h-0 max-h-[36rem] flex-1 overflow-y-auto rounded-xl border border-border/60 bg-card/70 p-4">
                     <RiskAnalysisSummary data={liveRiskAnalyzeData ?? riskAnalyzeMutation.data ?? null} />
                   </div>
                 </div>
@@ -1652,8 +1698,12 @@ export function OfflineStudioView(): JSX.Element {
 
               <details className="card-surface rounded-2xl border border-border/60 bg-background/45 p-4">
                 <summary className="cursor-pointer text-sm font-medium">原始预览 JSON</summary>
-                <div className="mt-3">
-                  <JsonViewer data={previewData ?? { status: "idle" }} compact />
+                <div className="console-scrollbar mt-3 max-h-[28rem] overflow-y-auto">
+                  <JsonViewer
+                    data={previewData ?? { status: "idle" }}
+                    compact
+                    compactContainerClassName="min-h-0"
+                  />
                 </div>
               </details>
             </div>
@@ -1937,9 +1987,13 @@ export function OfflineStudioView(): JSX.Element {
                   </div>
                 </div>
 
-                <div className="console-scrollbar max-h-[18rem] overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
-                  <JsonViewer data={instrumentData ?? { status: "idle" }} compact />
-                </div>
+                  <div className="console-scrollbar max-h-[28rem] overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
+                    <JsonViewer
+                      data={instrumentData ?? { status: "idle" }}
+                      compact
+                      compactContainerClassName="min-h-0"
+                    />
+                  </div>
               </CardContent>
             </Card>
 
@@ -1967,9 +2021,13 @@ export function OfflineStudioView(): JSX.Element {
 
               <details className="card-surface rounded-2xl border border-border/60 bg-background/45 p-4">
                 <summary className="cursor-pointer text-sm font-medium">原始插桩 JSON</summary>
-                <div className="mt-3">
-                  <JsonViewer data={instrumentData ?? { status: "idle" }} compact />
-                </div>
+                  <div className="console-scrollbar mt-3 max-h-[28rem] overflow-y-auto">
+                    <JsonViewer
+                      data={instrumentData ?? { status: "idle" }}
+                      compact
+                      compactContainerClassName="min-h-0"
+                    />
+                  </div>
               </details>
             </div>
           </div>
@@ -2475,12 +2533,20 @@ export function OfflineStudioView(): JSX.Element {
                   <CardDescription>查看源目录探测结果、编译器选择和最新构建计划</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
-                    <JsonViewer data={(buildProbeQuery.data as BuildProbe | undefined) ?? { status: "idle" }} compact />
-                  </div>
-                  <div className="rounded-2xl border border-border/60 bg-background/45 p-4">
-                    <JsonViewer data={(buildPlansQuery.data?.[0] as BuildPlan | undefined) ?? { status: "idle" }} compact />
-                  </div>
+                    <div className="console-scrollbar max-h-[28rem] overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
+                      <JsonViewer
+                        data={(buildProbeQuery.data as BuildProbe | undefined) ?? { status: "idle" }}
+                        compact
+                        compactContainerClassName="min-h-0"
+                      />
+                    </div>
+                    <div className="console-scrollbar max-h-[28rem] overflow-y-auto rounded-2xl border border-border/60 bg-background/45 p-4">
+                      <JsonViewer
+                        data={(buildPlansQuery.data?.[0] as BuildPlan | undefined) ?? { status: "idle" }}
+                        compact
+                        compactContainerClassName="min-h-0"
+                      />
+                    </div>
                 </CardContent>
               </Card>
 
