@@ -604,6 +604,7 @@ export function OfflineStudioView(): JSX.Element {
   const [riskUploadRunning, setRiskUploadRunning] = useState(false);
   const [cancelRequestedTabs, setCancelRequestedTabs] = useState<Partial<Record<OfflineTab, boolean>>>({});
   const [cancelingOperationId, setCancelingOperationId] = useState<string | null>(null);
+  const [protocolPreviewReadyOperationId, setProtocolPreviewReadyOperationId] = useState<string | null>(null);
 
   const protocolsQuery = useQuery({
     queryKey: ["protocols"],
@@ -790,7 +791,10 @@ export function OfflineStudioView(): JSX.Element {
 
   const protocolMutation = useMutation({
     mutationFn: offlineApi.protocolAnalyze,
-    onSuccess: async (data: ProtocolAnalyzeResponse) => {
+    onMutate: () => {
+      setProtocolPreviewReadyOperationId(null);
+    },
+    onSuccess: async (data: ProtocolAnalyzeResponse, variables) => {
       const specPath = protocolPrimaryPathFromResponse(data);
       const relatedPaths = protocolRelatedPathsFromResponse(data);
       const protocolValue = protocolNameFromResponse(data) || protocolForm.getValues("protocol");
@@ -810,6 +814,7 @@ export function OfflineStudioView(): JSX.Element {
       buildPlanForm.setValue("protocol", protocolValue, { shouldDirty: true, shouldValidate: true });
       setVuldocProtocol(protocolValue);
       setRiskUploadProtocol(protocolValue);
+      setProtocolPreviewReadyOperationId(data.operation_id ?? String(variables.operation_id ?? ""));
 
       await protocolsQuery.refetch();
     },
@@ -1001,12 +1006,11 @@ export function OfflineStudioView(): JSX.Element {
   }, [allKbEntries, selectedKbEntryId]);
 
   const protocolSpecPreviewQuery = useQuery({
-    queryKey: ["offline", "protocol-spec-preview", protocolAssets?.specFileRef, operationIds.protocol, protocolPrimaryPathFromResponse(protocolMutation.data ?? {})],
+    queryKey: ["offline", "protocol-spec-preview", protocolAssets?.specFileRef, protocolPreviewReadyOperationId],
     queryFn: () => loadWorkspacePreviewByRef(protocolAssets?.specFileRef),
-    enabled: Boolean(protocolAssets?.specFileRef) && (Boolean(operationIds.protocol) || Boolean(protocolMutation.data)),
+    enabled: Boolean(protocolAssets?.specFileRef) && Boolean(protocolPreviewReadyOperationId),
     retry: false,
     refetchOnWindowFocus: false,
-    refetchInterval: protocolMutation.isPending ? 1200 : false,
   });
 
   const seedsOutputFilesQuery = useQuery({
