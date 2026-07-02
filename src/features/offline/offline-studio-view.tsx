@@ -239,6 +239,10 @@ function parsePreviewContent(preview?: WorkspacePreviewResponse | null): unknown
   return preview.content;
 }
 
+function isStructuredPreviewObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function formatFileSize(value?: number | null): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   if (value < 1024) return `${value} B`;
@@ -470,7 +474,7 @@ export function OfflineStudioView(): JSX.Element {
   const [cancelRequestedTabs, setCancelRequestedTabs] = useState<Partial<Record<OfflineTab, boolean>>>({});
   const [cancelingOperationId, setCancelingOperationId] = useState<string | null>(null);
   const [protocolPreviewReadyOperationId, setProtocolPreviewReadyOperationId] = useState<string | null>(null);
-  const [stickyProtocolPreviewData, setStickyProtocolPreviewData] = useState<unknown>({ status: "idle" });
+  const [stickyProtocolPreviewData, setStickyProtocolPreviewData] = useState<Record<string, unknown> | null>(null);
 
   const protocolsQuery = useQuery({
     queryKey: ["protocols"],
@@ -659,7 +663,7 @@ export function OfflineStudioView(): JSX.Element {
     mutationFn: offlineApi.protocolAnalyze,
     onMutate: () => {
       setProtocolPreviewReadyOperationId(null);
-      setStickyProtocolPreviewData({ status: "running" });
+      setStickyProtocolPreviewData(null);
     },
     onSuccess: async (data: ProtocolAnalyzeResponse, variables) => {
       const specPath = protocolPrimaryPathFromResponse(data);
@@ -877,8 +881,16 @@ export function OfflineStudioView(): JSX.Element {
     queryFn: () => loadWorkspacePreviewByRef(protocolAssets?.specFileRef),
     enabled: Boolean(protocolAssets?.specFileRef) && (Boolean(operationIds.protocol) || Boolean(protocolPreviewReadyOperationId)),
     retry: false,
+    staleTime: 0,
     refetchOnWindowFocus: false,
-    refetchInterval: protocolMutation.isPending || Boolean(protocolPreviewReadyOperationId) ? 1200 : false,
+    refetchInterval: (query) => {
+      const parsedPreviewData = parsePreviewContent(query.state.data as WorkspacePreviewResponse | null | undefined);
+      const hasStructuredPreview = isStructuredPreviewObject(parsedPreviewData);
+
+      if (protocolMutation.isPending) return 1200;
+      if (protocolPreviewReadyOperationId && !hasStructuredPreview) return 1200;
+      return false;
+    },
   });
 
   const seedsOutputFilesQuery = useQuery({
@@ -920,43 +932,38 @@ export function OfflineStudioView(): JSX.Element {
   );
 
   const hasStructuredProtocolPreview = useMemo(
-    () => Boolean(parsedProtocolPreviewData) && typeof parsedProtocolPreviewData === "object" && !Array.isArray(parsedProtocolPreviewData),
+    () => isStructuredPreviewObject(parsedProtocolPreviewData),
     [parsedProtocolPreviewData],
   );
 
   useEffect(() => {
     if (hasStructuredProtocolPreview) {
-      setStickyProtocolPreviewData(parsedProtocolPreviewData);
+      setStickyProtocolPreviewData(parsedProtocolPreviewData as Record<string, unknown>);
       return;
     }
 
-    if (protocolMutationFallbackData) {
-      setStickyProtocolPreviewData((current) => {
-        if (current && typeof current === "object" && !Array.isArray(current) && "frontend_reference" in (current as Record<string, unknown>)) {
-          return current;
-        }
-        return protocolMutationFallbackData;
-      });
-      return;
-    }
-
-    if (!operationIds.protocol && !protocolPreviewReadyOperationId && !protocolMutation.isPending) {
-      setStickyProtocolPreviewData({ status: "idle" });
+    if (!protocolMutation.isPending && !protocolPreviewReadyOperationId) {
+      setStickyProtocolPreviewData(null);
     }
   }, [
     hasStructuredProtocolPreview,
-    operationIds.protocol,
     parsedProtocolPreviewData,
     protocolMutation.isPending,
-    protocolMutationFallbackData,
     protocolPreviewReadyOperationId,
   ]);
 
   const protocolPreviewData = useMemo(() => {
     if (hasStructuredProtocolPreview) return parsedProtocolPreviewData;
     if (stickyProtocolPreviewData) return stickyProtocolPreviewData;
+    if (!protocolMutation.isPending && protocolMutationFallbackData) return protocolMutationFallbackData;
     return { status: protocolMutation.isPending ? "running" : "idle" };
-  }, [hasStructuredProtocolPreview, parsedProtocolPreviewData, protocolMutation.isPending, stickyProtocolPreviewData]);
+  }, [
+    hasStructuredProtocolPreview,
+    parsedProtocolPreviewData,
+    protocolMutation.isPending,
+    protocolMutationFallbackData,
+    stickyProtocolPreviewData,
+  ]);
 
   const liveSeedItems = useMemo(
     () =>

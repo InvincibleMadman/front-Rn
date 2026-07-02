@@ -1648,7 +1648,12 @@ app.all("/node-api/:nodeId/api/v1/*", { preHandler: [requireWebSession, requireC
   if (!node || !node.enabled) return reply.code(404).send({ ok: false, message: "node not found", data: null });
   const user = request.user;
   const prefix = `/node-api/${encodeURIComponent(nodeId)}`;
-  const pathWithQuery = request.url.startsWith(prefix) ? request.url.slice(prefix.length) : request.url;
+  const incomingUrl = request.raw.url || request.url || "/";
+  const parsedIncomingUrl = new URL(incomingUrl, "http://localhost");
+  const requestPathWithQuery = `${parsedIncomingUrl.pathname}${parsedIncomingUrl.search}`;
+  const pathWithQuery = requestPathWithQuery.startsWith(prefix)
+    ? requestPathWithQuery.slice(prefix.length)
+    : requestPathWithQuery;
   const rawBody = ["GET", "HEAD"].includes(request.method.toUpperCase())
     ? Buffer.alloc(0)
     : Buffer.isBuffer(request.body)

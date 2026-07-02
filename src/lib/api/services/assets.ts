@@ -204,7 +204,7 @@ export const assetsApi = {
   async getWorkspacePreview(protocol: string, scope: string, path: string): Promise<WorkspacePreviewResponse> {
     const response = await apiClient.requestEnvelope<WorkspacePreviewResponse>(
       `${nodeApiPath(`/protocols/${encodeURIComponent(protocol)}/workspace/preview`)}${queryString({ scope, path })}`,
-      { credentials: "include" },
+      { credentials: "include", cache: "no-store" },
     );
     return response.data;
   },
